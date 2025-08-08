@@ -59,3 +59,32 @@ export function safeEnumConvert<T extends Record<string, string | number>>(enumO
 
   return enumObject[key as keyof T];
 }
+
+import { WebApi } from "azure-devops-node-api";
+
+export function getServiceBaseUrl(connection: WebApi, serviceType: 'search' | 'identity', orgName: string | undefined): string {
+  const serverUrl = connection.serverUrl;
+
+  // For Azure DevOps Services
+  if (serverUrl.includes("dev.azure.com")) {
+    let org = orgName;
+    if (org === undefined) {
+        // Fallback: try to extract organization name from dev.azure.com URL
+        const parts = serverUrl.split('/');
+        if (parts.length >= 4 && parts[2] === 'dev.azure.com') {
+            org = parts[3];
+        }
+    }
+
+    if (org) {
+        if (serviceType === 'search') {
+            return `https://almsearch.dev.azure.com/${org}`;
+        } else if (serviceType === 'identity') {
+            return `https://vssps.dev.azure.com/${org}`;
+        }
+    }
+  }
+  // For on-premise or other custom URLs, use connection.serverUrl as base
+  // This assumes on-premise serves search/identity APIs directly under the main URL
+  return serverUrl;
+}

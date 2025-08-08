@@ -1,0 +1,11 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "command": "node dist/index.js org_id --transport http --port 3000",
+      "name": "Run MCP Server (Local HTTP)",
+      "request": "launch",
+      "type": "node-terminal"
+    }
+  ]
+}

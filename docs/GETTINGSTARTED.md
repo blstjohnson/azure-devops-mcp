@@ -28,12 +28,76 @@ Before you begin, make sure you have:
 2. Install [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli?view=azure-cli-latest)
 3. Open a project in Visual Studio
 
-### Azure Login
+### Authentication Setup
 
-Ensure you are logged in to Azure DevOps via the Azure CLI:
+The MCP Server supports both Azure DevOps Services (cloud) and private Azure DevOps Server deployments with automatic authentication detection.
+
+#### Azure DevOps Services (Cloud)
+For cloud deployments, ensure you are logged in via the Azure CLI:
 
 ```sh
 az login
+```
+
+#### Private/On-premises Azure DevOps Server
+For private servers, you'll need:
+
+1. **Generate a Personal Access Token (PAT)**:
+   - Navigate to your Azure DevOps Server (e.g., `https://tfs.company.com/DefaultCollection`)
+   - Go to User Settings → Personal Access Tokens
+   - Create a new token with appropriate scopes (recommend "Full access" for complete functionality)
+   - Copy the token immediately (it won't be shown again)
+
+2. **Azure CLI Authentication**:
+   ```sh
+   az login
+   ```
+
+3. **Configure server URL and organization** in your MCP configuration (see examples below)
+
+The server automatically detects your deployment type based on the server URL and uses the appropriate authentication method.
+
+## 🌐 Transport Options
+
+The MCP server supports two transport protocols:
+
+### Standard MCP Transport (Default)
+Uses stdio communication for direct integration with MCP clients:
+```bash
+mcp-server-azuredevops <organization> --server-url <url>
+```
+
+### HTTP Streaming Transport
+For scenarios requiring HTTP-based communication:
+```bash
+mcp-server-azuredevops <organization> --server-url <url> --transport http-streaming --http-port 3000
+```
+
+**HTTP Streaming Features:**
+- REST API endpoints for MCP communication
+- Custom authentication via HTTP headers
+- Configurable port (default: 3000)
+- Supports Bearer token authentication in request headers
+- Ideal for web applications and remote integrations
+
+**Authentication with HTTP Streaming:**
+- Pass Bearer token in `Authorization: Bearer <token>` header
+- Server automatically handles cloud vs private server authentication
+- Fallback to Azure CLI credentials if no token provided
+
+**Example HTTP Streaming Configuration:**
+```json
+{
+  "servers": {
+    "ado-http": {
+      "type": "http",
+      "url": "http://localhost:3000/mcp",
+      "headers": {
+        "Authorization": "Bearer your-pat-token-here"
+      }
+    }
+  }
+}
 ```
 
 ## 🍕 Installation Options
@@ -250,3 +314,125 @@ Replace `Contoso` with your Azure DevOps organization.
 You can now use the Azure DevOps MCP Server tools directly in chat.
 
 📽️ [Azure DevOps MCP Server: Getting started with Cursor](https://youtu.be/550VPTnjYRg)
+
+## 🏢 Private Server Configuration
+
+If you're using a private/on-premises Azure DevOps Server, you'll need additional configuration beyond the standard setup. The server automatically detects private deployments and uses Basic authentication with your Personal Access Token.
+
+### Prerequisites for Private Servers
+
+1. **Personal Access Token (PAT)**: Generate from your Azure DevOps Server with appropriate permissions
+2. **Azure CLI Authentication**: Run `az login` to authenticate
+3. **Server URL**: Your private Azure DevOps Server URL (e.g., `https://tfs.company.com/DefaultCollection`)
+
+### Configuration Examples
+
+#### VS Code Configuration for Private Server
+
+Create or update `.vscode/mcp.json`:
+
+```json
+{
+  "inputs": [
+    {
+      "id": "ado_org",
+      "type": "promptString",
+      "description": "Azure DevOps organization/collection name (e.g. 'DefaultCollection')"
+    }
+  ],
+  "servers": {
+    "ado": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@azure-devops/mcp", "${input:ado_org}"]
+    }
+  }
+}
+```
+
+For private servers, the organization name typically corresponds to your collection name (e.g., "DefaultCollection", "MyProjectCollection").
+
+#### Private Server with Custom Domain
+
+For private servers with custom domains, use the same configuration:
+
+```json
+{
+  "inputs": [
+    {
+      "id": "ado_org",
+      "type": "promptString",
+      "description": "Azure DevOps collection name (e.g. 'DefaultCollection')"
+    }
+  ],
+  "servers": {
+    "ado": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@azure-devops/mcp", "${input:ado_org}"]
+    }
+  }
+}
+```
+
+#### Multi-tenant Scenarios
+
+If you're in a multi-tenant environment and experiencing authentication issues, add tenant ID specification:
+
+```json
+{
+  "inputs": [
+    {
+      "id": "ado_org",
+      "type": "promptString",
+      "description": "Azure DevOps organization/collection name"
+    },
+    {
+      "id": "ado_tenant",
+      "type": "promptString",
+      "description": "Azure tenant ID (for multi-tenant scenarios)"
+    }
+  ],
+  "servers": {
+    "ado": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@azure-devops/mcp", "${input:ado_org}", "--tenant", "${input:ado_tenant}"]
+    }
+  }
+}
+```
+
+### Common Private Server URLs
+
+- **Team Foundation Server**: `https://tfs.company.com/DefaultCollection`
+- **Azure DevOps Server**: `https://azuredevops.company.com/DefaultCollection`
+- **Custom domain**: `https://devops.mycompany.com/ProjectCollection`
+- **IP-based**: `https://192.168.1.100:8080/tfs/DefaultCollection`
+
+### Authentication Flow for Private Servers
+
+1. **Server Detection**: MCP automatically detects non-`dev.azure.com` URLs as private servers
+2. **Authentication Method**: Switches to Basic authentication using `:token` format
+3. **Token Source**: Uses Azure CLI token (ensure `az login` is completed)
+4. **PAT Requirement**: Your Azure DevOps Server user must have a valid PAT configured
+
+### Troubleshooting Private Server Setup
+
+If you encounter issues:
+
+1. **Verify PAT permissions**: Ensure your PAT has necessary scopes for the tools you want to use
+2. **Check server URL**: Confirm you can access your Azure DevOps Server via browser
+3. **Test Azure CLI**: Run `az devops project list --organization https://your-server/collection` to verify connectivity
+4. **Review tenant configuration**: For multi-tenant setups, ensure correct tenant ID is specified
+
+For more troubleshooting guidance, see the [Troubleshooting guide](./TROUBLESHOOTING.md#private-server-authentication-issues).
+
+## 🚀 Optimizing Your Experience
+
+To get the most out of the Azure DevOps MCP Server:
+
+1. **Configure Copilot Instructions**: Create a `.github/copilot-instructions.md` file with Azure DevOps context
+2. **Use Descriptive Prompts**: Include project names and specific contexts in your requests
+3. **Leverage Agent Mode**: Always use GitHub Copilot in Agent Mode for best tool integration
+4. **Cache Frequently Used Data**: Set default project names in your copilot instructions for faster access

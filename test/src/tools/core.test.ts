@@ -37,14 +37,14 @@ describe("configureCoreTools", () => {
 
   describe("tool registration", () => {
     it("registers core tools on the server", () => {
-      configureCoreTools(server, tokenProvider, connectionProvider);
+      configureCoreTools(server, tokenProvider, connectionProvider, undefined);
       expect(server.tool as jest.Mock).toHaveBeenCalled();
     });
   });
 
   describe("list_projects tool", () => {
     it("should call getProjects API with the correct parameters and return the expected result", async () => {
-      configureCoreTools(server, tokenProvider, connectionProvider);
+      configureCoreTools(server, tokenProvider, connectionProvider, undefined);
 
       const call = (server.tool as jest.Mock).mock.calls.find(([toolName]) => toolName === "core_list_projects");
 
@@ -117,7 +117,7 @@ describe("configureCoreTools", () => {
     });
 
     it("should handle API errors correctly", async () => {
-      configureCoreTools(server, tokenProvider, connectionProvider);
+      configureCoreTools(server, tokenProvider, connectionProvider, undefined);
 
       const call = (server.tool as jest.Mock).mock.calls.find(([toolName]) => toolName === "core_list_projects");
 
@@ -142,7 +142,7 @@ describe("configureCoreTools", () => {
     });
 
     it("should handle null API results correctly", async () => {
-      configureCoreTools(server, tokenProvider, connectionProvider);
+      configureCoreTools(server, tokenProvider, connectionProvider, undefined);
 
       const call = (server.tool as jest.Mock).mock.calls.find(([toolName]) => toolName === "core_list_projects");
 
@@ -166,7 +166,7 @@ describe("configureCoreTools", () => {
     });
 
     it("should handle unknown error type correctly", async () => {
-      configureCoreTools(server, tokenProvider, connectionProvider);
+      configureCoreTools(server, tokenProvider, connectionProvider, undefined);
 
       const call = (server.tool as jest.Mock).mock.calls.find(([toolName]) => toolName === "core_list_projects");
 
@@ -190,7 +190,7 @@ describe("configureCoreTools", () => {
     });
 
     it("should filter projects by name when projectNameFilter is provided", async () => {
-      configureCoreTools(server, tokenProvider, connectionProvider);
+      configureCoreTools(server, tokenProvider, connectionProvider, undefined);
 
       const call = (server.tool as jest.Mock).mock.calls.find(([toolName]) => toolName === "core_list_projects");
 
@@ -239,7 +239,7 @@ describe("configureCoreTools", () => {
     });
 
     it("should handle case-insensitive filtering", async () => {
-      configureCoreTools(server, tokenProvider, connectionProvider);
+      configureCoreTools(server, tokenProvider, connectionProvider, undefined);
 
       const call = (server.tool as jest.Mock).mock.calls.find(([toolName]) => toolName === "core_list_projects");
 
@@ -280,7 +280,7 @@ describe("configureCoreTools", () => {
 
   describe("list_project_teams tool", () => {
     it("should call getTeams API with the correct parameters and return the expected result", async () => {
-      configureCoreTools(server, tokenProvider, connectionProvider);
+      configureCoreTools(server, tokenProvider, connectionProvider, undefined);
 
       const call = (server.tool as jest.Mock).mock.calls.find(([toolName]) => toolName === "core_list_project_teams");
 
@@ -341,7 +341,7 @@ describe("configureCoreTools", () => {
     });
 
     it("should handle API errors correctly", async () => {
-      configureCoreTools(server, tokenProvider, connectionProvider);
+      configureCoreTools(server, tokenProvider, connectionProvider, undefined);
 
       const call = (server.tool as jest.Mock).mock.calls.find(([toolName]) => toolName === "core_list_project_teams");
 
@@ -366,7 +366,7 @@ describe("configureCoreTools", () => {
     });
 
     it("should handle null API results correctly", async () => {
-      configureCoreTools(server, tokenProvider, connectionProvider);
+      configureCoreTools(server, tokenProvider, connectionProvider, undefined);
 
       const call = (server.tool as jest.Mock).mock.calls.find(([toolName]) => toolName === "core_list_project_teams");
 
@@ -390,7 +390,7 @@ describe("configureCoreTools", () => {
     });
 
     it("should handle unknown error type correctly", async () => {
-      configureCoreTools(server, tokenProvider, connectionProvider);
+      configureCoreTools(server, tokenProvider, connectionProvider, undefined);
 
       const call = (server.tool as jest.Mock).mock.calls.find(([toolName]) => toolName === "core_list_project_teams");
 
@@ -425,7 +425,7 @@ describe("configureCoreTools", () => {
     });
 
     it("should fetch identity IDs with correct parameters and return expected result", async () => {
-      configureCoreTools(server, tokenProvider, connectionProvider);
+      configureCoreTools(server, tokenProvider, connectionProvider, undefined);
 
       const call = (server.tool as jest.Mock).mock.calls.find(([toolName]) => toolName === "core_get_identity_ids");
       if (!call) throw new Error("core_get_identity_ids tool not registered");
@@ -490,7 +490,7 @@ describe("configureCoreTools", () => {
     });
 
     it("should handle HTTP error responses correctly", async () => {
-      configureCoreTools(server, tokenProvider, connectionProvider);
+      configureCoreTools(server, tokenProvider, connectionProvider, undefined);
 
       const call = (server.tool as jest.Mock).mock.calls.find(([toolName]) => toolName === "core_get_identity_ids");
       if (!call) throw new Error("core_get_identity_ids tool not registered");
@@ -518,7 +518,7 @@ describe("configureCoreTools", () => {
     });
 
     it("should handle empty results correctly", async () => {
-      configureCoreTools(server, tokenProvider, connectionProvider);
+      configureCoreTools(server, tokenProvider, connectionProvider, undefined);
 
       const call = (server.tool as jest.Mock).mock.calls.find(([toolName]) => toolName === "core_get_identity_ids");
       if (!call) throw new Error("core_get_identity_ids tool not registered");
@@ -545,7 +545,7 @@ describe("configureCoreTools", () => {
     });
 
     it("should handle null response correctly", async () => {
-      configureCoreTools(server, tokenProvider, connectionProvider);
+      configureCoreTools(server, tokenProvider, connectionProvider, undefined);
 
       const call = (server.tool as jest.Mock).mock.calls.find(([toolName]) => toolName === "core_get_identity_ids");
       if (!call) throw new Error("core_get_identity_ids tool not registered");
@@ -572,7 +572,7 @@ describe("configureCoreTools", () => {
     });
 
     it("should handle network errors correctly", async () => {
-      configureCoreTools(server, tokenProvider, connectionProvider);
+      configureCoreTools(server, tokenProvider, connectionProvider, undefined);
 
       const call = (server.tool as jest.Mock).mock.calls.find(([toolName]) => toolName === "core_get_identity_ids");
       if (!call) throw new Error("core_get_identity_ids tool not registered");
@@ -596,7 +596,7 @@ describe("configureCoreTools", () => {
     });
 
     it("should handle unknown error types correctly", async () => {
-      configureCoreTools(server, tokenProvider, connectionProvider);
+      configureCoreTools(server, tokenProvider, connectionProvider, undefined);
 
       const call = (server.tool as jest.Mock).mock.calls.find(([toolName]) => toolName === "core_get_identity_ids");
       if (!call) throw new Error("core_get_identity_ids tool not registered");
@@ -620,7 +620,7 @@ describe("configureCoreTools", () => {
     });
 
     it("should handle token provider errors correctly", async () => {
-      configureCoreTools(server, tokenProvider, connectionProvider);
+      configureCoreTools(server, tokenProvider, connectionProvider, undefined);
 
       const call = (server.tool as jest.Mock).mock.calls.find(([toolName]) => toolName === "core_get_identity_ids");
       if (!call) throw new Error("core_get_identity_ids tool not registered");

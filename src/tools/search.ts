@@ -6,7 +6,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebApi } from "azure-devops-node-api";
 import { IGitApi } from "azure-devops-node-api/GitApi.js";
 import { z } from "zod";
-import { apiVersion, getServiceBaseUrl } from "../utils.js";
+import { apiVersion, getServiceBaseUrl, getAuthorizationHeader } from "../utils.js";
 import { VersionControlRecursionType } from "azure-devops-node-api/interfaces/GitInterfaces.js";
 import { GitItem } from "azure-devops-node-api/interfaces/GitInterfaces.js";
 
@@ -57,7 +57,7 @@ function configureSearchTools(server: McpServer, tokenProvider: () => Promise<Ac
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${accessToken.token}`,
+          "Authorization": getAuthorizationHeader(connection.serverUrl, accessToken.token),
           "User-Agent": userAgentProvider(),
         },
         body: JSON.stringify(requestBody),
@@ -115,7 +115,7 @@ function configureSearchTools(server: McpServer, tokenProvider: () => Promise<Ac
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${accessToken.token}`,
+          "Authorization": getAuthorizationHeader(connection.serverUrl, accessToken.token),
           "User-Agent": userAgentProvider(),
         },
         body: JSON.stringify(requestBody),
@@ -174,7 +174,7 @@ function configureSearchTools(server: McpServer, tokenProvider: () => Promise<Ac
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${accessToken.token}`,
+          "Authorization": getAuthorizationHeader(connection.serverUrl, accessToken.token),
           "User-Agent": userAgentProvider(),
         },
         body: JSON.stringify(requestBody),

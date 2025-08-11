@@ -1,4 +1,4 @@
-This guide offers step-by-step examples for using the Azure DevOps MCP Server to interact with your Azure DevOps organization. For additional tips and best practices, see the [How To guide](./HOWTO.md).
+This guide offers step-by-step examples for using the Azure DevOps MCP Server to interact with your Azure DevOps organization or private server. For additional tips and best practices, see the [How To guide](./HOWTO.md).
 
 > 📝 These examples have been tested and validated only in English. If you encounter issues when using a different language, please open an issue in the repository so we can investigate.
 

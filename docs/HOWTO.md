@@ -1,4 +1,4 @@
-Be sure to follow all the steps in the [Getting Started guide](./GETTINGSTARTED.md) to quickly set up and connect to your Azure DevOps organization.
+Be sure to follow all the steps in the [Getting Started guide](./GETTINGSTARTED.md) to quickly set up and connect to your Azure DevOps organization or private server.
 
 # 🥇 How to make your experience better
 

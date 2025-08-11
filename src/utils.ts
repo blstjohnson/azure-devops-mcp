@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { Buffer } from 'buffer';
+
 export const apiVersion = "7.2-preview.1";
 export const batchApiVersion = "5.0";
 export const markdownCommentsApiVersion = "7.2-preview.4";
@@ -62,6 +64,26 @@ export function safeEnumConvert<T extends Record<string, string | number>>(enumO
 
 import { WebApi } from "azure-devops-node-api";
 
+/**
+ * Generates the appropriate Authorization header value based on server type.
+ * For Azure DevOps Services (cloud), uses Bearer authentication.
+ * For on-premise/private servers, uses Basic authentication with empty username and token as password.
+ * @param serverUrl The Azure DevOps server URL
+ * @param token The authentication token
+ * @returns The Authorization header value
+ */
+export function getAuthorizationHeader(serverUrl: string, token: string): string {
+  if (serverUrl.includes("dev.azure.com") || serverUrl.includes("vsrm.dev.azure.com")) {
+    // Azure DevOps Services (cloud) - use Bearer authentication
+    return `Bearer ${token}`;
+  } else {
+    // On-premise/private servers - use Basic authentication with empty username
+    const credentials = `:${token}`;
+    const encodedCredentials = Buffer.from(credentials).toString('base64');
+    return `Basic ${encodedCredentials}`;
+  }
+}
+
 export function getServiceBaseUrl(connection: WebApi, serviceType: 'search' | 'identity', orgName: string | undefined): string {
   const serverUrl = connection.serverUrl;
 
@@ -80,7 +102,7 @@ export function getServiceBaseUrl(connection: WebApi, serviceType: 'search' | 'i
         if (serviceType === 'search') {
             return `https://almsearch.dev.azure.com/${org}`;
         } else if (serviceType === 'identity') {
-            return `https://vssps.dev.azure.com/${org}`;
+            return `https://vssps.dev.azure.com/${org}/_apis/identities`;
         }
     }
   }

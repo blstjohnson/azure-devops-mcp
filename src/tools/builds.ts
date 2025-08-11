@@ -3,7 +3,7 @@
 
 import { AccessToken } from "@azure/identity";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { apiVersion, getEnumKeys, safeEnumConvert } from "../utils.js";
+import { apiVersion, getEnumKeys, safeEnumConvert, getAuthorizationHeader } from "../utils.js";
 import { WebApi } from "azure-devops-node-api";
 import { BuildQueryOrder, DefinitionQueryOrder } from "azure-devops-node-api/interfaces/BuildInterfaces.js";
 import { z } from "zod";
@@ -339,7 +339,7 @@ function configureBuildTools(server: McpServer, tokenProvider: () => Promise<Acc
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token.token}`,
+          "Authorization": getAuthorizationHeader(orgUrl, token.token),
         },
         body: JSON.stringify(body),
       });

@@ -5,7 +5,7 @@ import { AccessToken } from "@azure/identity";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebApi } from "azure-devops-node-api";
 import { z } from "zod";
-import { apiVersion, getServiceBaseUrl } from "../utils.js";
+import { apiVersion, getServiceBaseUrl, getAuthorizationHeader } from "../utils.js";
 
 import type { ProjectInfo } from "azure-devops-node-api/interfaces/CoreInterfaces.js";
 import { IdentityBase } from "azure-devops-node-api/interfaces/IdentitiesInterfaces.js";
@@ -111,7 +111,7 @@ function configureCoreTools(server: McpServer, tokenProvider: () => Promise<Acce
 
         const response = await fetch(`${baseUrl}?${params}`, {
           headers: {
-            "Authorization": `Bearer ${token.token}`,
+            "Authorization": getAuthorizationHeader(connection.serverUrl, token.token),
             "Content-Type": "application/json",
           },
         });

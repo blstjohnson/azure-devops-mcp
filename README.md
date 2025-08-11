@@ -5,7 +5,7 @@ Easily install the Azure DevOps MCP Server for VS Code or VS Code Insiders:
 [![Install with NPX in VS Code](https://img.shields.io/badge/VS_Code-Install_AzureDevops_MCP_Server-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=ado&config=%7B%20%22type%22%3A%20%22stdio%22%2C%20%22command%22%3A%20%22npx%22%2C%20%22args%22%3A%20%5B%22-y%22%2C%20%22%40azure-devops%2Fmcp%22%2C%20%22%24%7Binput%3Aado_org%7D%22%5D%7D&inputs=%5B%7B%22id%22%3A%20%22ado_org%22%2C%20%22type%22%3A%20%22promptString%22%2C%20%22description%22%3A%20%22Azure%20DevOps%20organization%20name%20%20%28e.g.%20%27contoso%27%29%22%7D%5D)
 [![Install with NPX in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Install_AzureDevops_MCP_Server-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=ado&quality=insiders&config=%7B%20%22type%22%3A%20%22stdio%22%2C%20%22command%22%3A%20%22npx%22%2C%20%22args%22%3A%20%5B%22-y%22%2C%20%22%40azure-devops%2Fmcp%22%2C%20%22%24%7Binput%3Aado_org%7D%22%5D%7D&inputs=%5B%7B%22id%22%3A%20%22ado_org%22%2C%20%22type%22%3A%20%22promptString%22%2C%20%22description%22%3A%20%22Azure%20DevOps%20organization%20name%20%20%28e.g.%20%27contoso%27%29%22%7D%5D)
 
-This TypeScript project provides a **local** MCP server for Azure DevOps, enabling you to perform a wide range of Azure DevOps tasks directly from your code editor.
+This TypeScript project provides a **local** MCP server for Azure DevOps, enabling you to perform a wide range of Azure DevOps tasks directly from your code editor. Supports both **Azure DevOps Services** (cloud) and **private/on-premises Azure DevOps Server** deployments with automatic authentication detection.
 
 > 🚨 **Public Preview:** This project is in public preview. Tools and features may change before general availability.
 
@@ -141,7 +141,12 @@ Interact with these Azure DevOps services:
 
 ## 🔌 Installation & Getting Started
 
-For the best experience, use Visual Studio Code and GitHub Copilot. See the [getting started documentation](./docs/GETTINGSTARTED.md) to use our MCP Server with other tools such as Visual Studio 2022, Claude Code, and Cursor.
+For the best experience, use Visual Studio Code and GitHub Copilot. The server automatically detects your Azure DevOps deployment type and uses the appropriate authentication method:
+
+- **Azure DevOps Services** (`*.dev.azure.com`): Bearer token authentication
+- **Private/On-premises servers**: Basic authentication with Personal Access Token (PAT)
+
+See the [getting started documentation](./docs/GETTINGSTARTED.md) to use our MCP Server with other tools such as Visual Studio 2022, Claude Code, and Cursor.
 
 ### Prerequisites
 
@@ -150,13 +155,53 @@ For the best experience, use Visual Studio Code and GitHub Copilot. See the [get
 3. Install [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli?view=azure-cli-latest)
 4. Open VS Code in an empty folder
 
-### Azure Login
+### Authentication
 
-Ensure you are logged in to Azure DevOps via the Azure CLI:
+The MCP Server supports both Azure DevOps Services (cloud) and private Azure DevOps Server deployments:
+
+#### Azure DevOps Services (Cloud)
+For cloud deployments, ensure you are logged in via the Azure CLI:
 
 ```sh
 az login
 ```
+
+#### Private/On-premises Azure DevOps Server
+For private servers, you'll need:
+1. A Personal Access Token (PAT) generated from your Azure DevOps Server
+2. Azure CLI login for authentication: `az login`
+
+The server automatically detects your deployment type based on the server URL and uses the appropriate authentication method.
+
+For detailed configuration examples, see the [Getting Started guide](./docs/GETTINGSTARTED.md#private-server-configuration).
+
+### Transport Options
+
+The MCP server supports two transport protocols:
+
+#### Standard MCP Transport (Default)
+Uses stdio communication for direct integration with MCP clients:
+```bash
+mcp-server-azuredevops <organization> --server-url <url>
+```
+
+#### HTTP Streaming Transport
+For scenarios requiring HTTP-based communication:
+```bash
+mcp-server-azuredevops <organization> --server-url <url> --transport http-streaming --http-port 3000
+```
+
+**HTTP Streaming Features:**
+- REST API endpoints for MCP communication
+- Custom authentication via HTTP headers
+- Configurable port (default: 3000)
+- Supports Bearer token authentication in request headers
+- Ideal for web applications and remote integrations
+
+**Authentication with HTTP Streaming:**
+- Pass Bearer token in `Authorization: Bearer <token>` header
+- Server automatically handles cloud vs private server authentication
+- Fallback to Azure CLI credentials if no token provided
 
 ### Installation
 
@@ -212,6 +257,8 @@ Open GitHub Copilot Chat and try a prompt like `List ADO projects`.
 > To start, just include "`This project uses Azure DevOps. Always check to see if the Azure DevOps MCP server has a tool relevant to the user's request`" in your copilot instructions file.
 
 See the [getting started documentation](./docs/GETTINGSTARTED.md) to use our MCP Server with other tools such as Visual Studio 2022, Claude Code, and Cursor.
+
+For private server configuration examples, see the [configuration examples](./docs/examples/).
 
 ## 📝 Troubleshooting
 

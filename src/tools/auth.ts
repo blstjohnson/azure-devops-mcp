@@ -3,6 +3,7 @@
 
 import { AccessToken } from "@azure/identity";
 import { WebApi } from "azure-devops-node-api";
+import { getAuthorizationHeader } from "../utils.js";
 
 async function getCurrentUserDetails(tokenProvider: () => Promise<AccessToken>, connectionProvider: () => Promise<WebApi>) {
   const connection = await connectionProvider();
@@ -11,7 +12,7 @@ async function getCurrentUserDetails(tokenProvider: () => Promise<AccessToken>, 
   const response = await fetch(url, {
     method: "GET",
     headers: {
-      "Authorization": `Bearer ${token}`,
+      "Authorization": getAuthorizationHeader(connection.serverUrl, token),
       "Content-Type": "application/json",
     },
   });

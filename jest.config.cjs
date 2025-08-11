@@ -45,5 +45,10 @@ module.exports = {
     "^(.+)/version\\.js$": "$1/version.ts",
     "^(.+)/utils\\.js$": "$1/utils.ts",
     "^(.+)/auth\\.js$": "$1/auth.ts",
+    "^(.+)/schemas\\.js$": "$1/schemas.ts",
+    "^(.+)/testsuites\\.js$": "$1/testsuites.ts",
+    "^(.+)/testcases\\.js$": "$1/testcases.ts",
+    "^(.+)/testexecution\\.js$": "$1/testexecution.ts",
+    "^(.+)/testing/index\\.js$": "$1/testing/index.ts",
   },
 };

@@ -12,6 +12,7 @@ import { configureReleaseTools } from "./tools/releases.js";
 import { configureRepoTools } from "./tools/repos.js";
 import { configureSearchTools } from "./tools/search.js";
 import { configureTestPlanTools } from "./tools/testplans.js";
+import { configureTestingTools } from "./tools/testing/index.js";
 import { configureWikiTools } from "./tools/wiki.js";
 import { configureWorkTools } from "./tools/work.js";
 import { configureWorkItemTools } from "./tools/workitems.js";
@@ -25,6 +26,7 @@ function configureAllTools(server: McpServer, tokenProvider: () => Promise<Acces
   configureReleaseTools(server, tokenProvider, connectionProvider);
   configureWikiTools(server, tokenProvider, connectionProvider);
   configureTestPlanTools(server, tokenProvider, connectionProvider);
+  configureTestingTools(server, tokenProvider, connectionProvider);
   configureSearchTools(server, tokenProvider, connectionProvider, userAgentProvider, orgName);
   configureAdvSecTools(server, tokenProvider, connectionProvider);
 }

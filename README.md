@@ -124,14 +124,28 @@ Interact with these Azure DevOps services:
 - **advsec_get_alerts**: Retrieve Advanced Security alerts for a repository.
 - **advsec_get_alert_details**: Get detailed information about a specific Advanced Security alert.
 
-### 🧪 Test Plans
+### 🧪 Testing Intelligence Platform
 
+#### Test Plans & Management
 - **testplan_create_test_plan**: Create a new test plan in the project.
 - **testplan_create_test_case**: Create a new test case work item.
 - **testplan_add_test_cases_to_suite**: Add existing test cases to a test suite.
 - **testplan_list_test_plans**: Retrieve a paginated list of test plans from an Azure DevOps project. Allows filtering for active plans and toggling detailed information.
 - **testplan_list_test_cases**: Get a list of test cases in the test plan.
 - **testplan_show_test_results_from_build_id**: Get a list of test results for a given project and build ID.
+
+#### Test Analytics & Intelligence 🧠
+- **testanalytics_detect_flaky_tests**: Intelligent flaky test detection with statistical analysis, pattern recognition, confidence scoring, and historical trend analysis.
+- **testanalytics_quality_metrics**: Comprehensive quality metrics including test coverage analysis, success rate trends, execution time analysis, and defect density correlation.
+- **testanalytics_performance_analysis**: Performance insights with execution time trends, resource utilization patterns, performance regression detection, and bottleneck identification.
+- **testanalytics_risk_assessment**: Risk-based testing insights with code change impact analysis, test selection optimization, risk scoring, and predictive failure analysis.
+- **testanalytics_team_productivity**: Team performance metrics including test authoring velocity, maintenance effort analysis, and resource optimization suggestions.
+
+#### Test Reporting & Visualization 📊
+- **testreporting_generate_standard_reports**: Standard report generation with multiple format support (PDF, Excel, HTML, JSON, CSV).
+- **testreporting_create_custom_reports**: Custom report builder with drag-and-drop designer, custom metrics, templates, and scheduled generation.
+- **testreporting_export_data**: Data export capabilities with raw data extraction, filtered datasets, API feeds, and BI tool integration.
+- **testreporting_manage_dashboards**: Dashboard management with real-time test dashboards, executive views, team-specific dashboards, and alerting.
 
 ### 🔎 Search
 

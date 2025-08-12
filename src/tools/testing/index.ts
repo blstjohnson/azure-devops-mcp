@@ -10,9 +10,11 @@ import { configureTestSuiteTools, TEST_SUITE_TOOLS } from "./testsuites.js";
 import { configureTestCaseTools, TEST_CASE_TOOLS } from "./testcases.js";
 import { configureTestExecutionTools, TEST_EXECUTION_TOOLS } from "./testexecution.js";
 import { configureTestConfigurationTools, TEST_CONFIGURATION_TOOLS } from "./testconfigurations.js";
+import { configureTestAnalyticsTools, TEST_ANALYTICS_TOOLS } from "./testanalytics.js";
+import { configureTestReportingTools, TEST_REPORTING_TOOLS } from "./testreporting.js";
 
 // Export all tool configurations
-export { TEST_SUITE_TOOLS, TEST_CASE_TOOLS, TEST_EXECUTION_TOOLS, TEST_CONFIGURATION_TOOLS };
+export { TEST_SUITE_TOOLS, TEST_CASE_TOOLS, TEST_EXECUTION_TOOLS, TEST_CONFIGURATION_TOOLS, TEST_ANALYTICS_TOOLS, TEST_REPORTING_TOOLS };
 
 // Export schemas and utilities
 export * from "./schemas.js";
@@ -26,6 +28,8 @@ export * from "./utils.js";
  * - Test Case Management (3 tools): update, search, bulk operations
  * - Test Execution (7 tools): run tests, update results, get run results, schedule runs, batch execution, execution history, test data management
  * - Test Configuration Management (6 tools): create, update, list, delete, clone, validate configurations
+ * - Test Analytics & Intelligence (5 tools): flaky test detection, quality metrics, performance analysis, risk assessment, team productivity
+ * - Test Reporting & Visualization (4 tools): standard reports, custom reports, data export, dashboard management
  *
  * @param server - The MCP server instance
  * @param tokenProvider - Function to get Azure DevOps access token
@@ -47,6 +51,12 @@ export function configureTestingTools(
   
   // Register test configuration management tools
   configureTestConfigurationTools(server, tokenProvider, connectionProvider);
+  
+  // Register test analytics & intelligence tools
+  configureTestAnalyticsTools(server, tokenProvider, connectionProvider);
+  
+  // Register test reporting & visualization tools
+  configureTestReportingTools(server, tokenProvider, connectionProvider);
 }
 
 /**
@@ -57,7 +67,9 @@ export function getAllTestingToolNames(): string[] {
     ...Object.values(TEST_SUITE_TOOLS),
     ...Object.values(TEST_CASE_TOOLS),
     ...Object.values(TEST_EXECUTION_TOOLS),
-    ...Object.values(TEST_CONFIGURATION_TOOLS)
+    ...Object.values(TEST_CONFIGURATION_TOOLS),
+    ...Object.values(TEST_ANALYTICS_TOOLS),
+    ...Object.values(TEST_REPORTING_TOOLS)
   ];
 }
 
@@ -81,6 +93,14 @@ export function getTestingToolsByCategory() {
     testConfigurations: {
       tools: TEST_CONFIGURATION_TOOLS,
       description: "Tools for managing test configurations (create, update, list, delete, clone, validate configurations)"
+    },
+    testAnalytics: {
+      tools: TEST_ANALYTICS_TOOLS,
+      description: "Tools for test analytics & intelligence (flaky test detection, quality metrics, performance analysis, risk assessment, team productivity)"
+    },
+    testReporting: {
+      tools: TEST_REPORTING_TOOLS,
+      description: "Tools for test reporting & visualization (standard reports, custom reports, data export, dashboard management)"
     }
   };
 }

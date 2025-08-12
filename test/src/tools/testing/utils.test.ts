@@ -199,6 +199,17 @@ describe("Testing Utils", () => {
       expect(xml).toContain('</steps>');
     });
 
+    it("should include required isformatted attributes for Azure DevOps Web UI compatibility", () => {
+      const steps = "1. Test step|Expected result";
+      
+      const xml = convertStepsToXml(steps);
+      
+      expect(xml).toContain('isformatted="true"');
+      // Should have exactly 2 parameterizedString elements with isformatted="true"
+      const matches = xml.match(/isformatted="true"/g);
+      expect(matches).toHaveLength(2);
+    });
+
     it("should handle steps without expected results", () => {
       const steps = "1. Step without expected result";
       
@@ -206,11 +217,18 @@ describe("Testing Utils", () => {
       
       expect(xml).toContain('Step without expected result');
       expect(xml).toContain('Verify step completes successfully');
+      // Should still have exactly 2 parameterizedString elements
+      const matches = xml.match(/<parameterizedString isformatted="true">/g);
+      expect(matches).toHaveLength(2);
     });
 
     it("should return empty string for empty input", () => {
       expect(convertStepsToXml("")).toBe("");
       expect(convertStepsToXml("   ")).toBe("");
+    });
+
+    it("should return empty string for input with only whitespace lines", () => {
+      expect(convertStepsToXml("\n\n  \n\t\n")).toBe("");
     });
 
     it("should handle XML special characters", () => {
@@ -220,6 +238,102 @@ describe("Testing Utils", () => {
       
       expect(xml).toContain('&lt;tag&gt; &amp; &quot;quotes&quot;');
       expect(xml).toContain('Expected &lt; &gt; result');
+    });
+
+    it("should reproduce test case 378827 scenario correctly", () => {
+      // This reproduces the exact scenario from the failing test case
+      // Note: multiline expected results are treated as separate steps (current behavior)
+      const steps = "1. Поместить файл configuration_1.csv\n2. Запустить мигратор|- Конфигурация успешно создана\n- Файл перемещён в CompletedFilesDir";
+      
+      const xml = convertStepsToXml(steps);
+      
+      // Should generate properly formatted XML with required attributes
+      // Note: this creates 3 steps because newlines split into separate steps
+      expect(xml).toContain('<steps id="0" last="3">');
+      expect(xml).toContain('<step id="1" type="ActionStep">');
+      expect(xml).toContain('<step id="2" type="ActionStep">');
+      expect(xml).toContain('<step id="3" type="ActionStep">');
+      
+      // Should have exactly 2 parameterizedString elements per step
+      const step1MatchResult = xml.match(/<step id="1"[^>]*>[\s\S]*?<\/step>/);
+      expect(step1MatchResult).not.toBeNull();
+      const step1Matches = step1MatchResult![0];
+      const step1ParamStrings = step1Matches.match(/<parameterizedString isformatted="true">/g);
+      expect(step1ParamStrings).toHaveLength(2);
+      
+      const step2MatchResult = xml.match(/<step id="2"[^>]*>[\s\S]*?<\/step>/);
+      expect(step2MatchResult).not.toBeNull();
+      const step2Matches = step2MatchResult![0];
+      const step2ParamStrings = step2Matches.match(/<parameterizedString isformatted="true">/g);
+      expect(step2ParamStrings).toHaveLength(2);
+      
+      // Should contain the Russian text properly escaped
+      expect(xml).toContain('Поместить файл configuration_1.csv');
+      expect(xml).toContain('Запустить мигратор');
+      expect(xml).toContain('Конфигурация успешно создана');
+      
+      // Should NOT contain <description> elements (which cause Web UI issues)
+      expect(xml).not.toContain('<description>');
+    });
+
+    it("should handle Unicode characters correctly", () => {
+      const steps = "1. Тест с Unicode символами|Ожидается корректная обработка";
+      
+      const xml = convertStepsToXml(steps);
+      
+      expect(xml).toContain('Тест с Unicode символами');
+      expect(xml).toContain('Ожидается корректная обработка');
+      expect(xml).toContain('isformatted="true"');
+    });
+
+    it("should handle empty step text gracefully", () => {
+      const steps = "1. |Expected result\n2. Valid step|";
+      
+      const xml = convertStepsToXml(steps);
+      
+      // When step text is empty after the number, it should use fallback
+      // Note: "1. " results in empty stepText, so fallback provides "Step 1"
+      expect(xml).toContain('Step 1');
+      expect(xml).toContain('Expected result');
+      expect(xml).toContain('Valid step');
+      expect(xml).toContain('Verify step completes successfully');
+    });
+
+    it("should handle steps without step numbers", () => {
+      const steps = "First step without number|Expected result\nSecond step|Another result";
+      
+      const xml = convertStepsToXml(steps);
+      
+      expect(xml).toContain('First step without number');
+      expect(xml).toContain('Second step');
+      expect(xml).toContain('Expected result');
+      expect(xml).toContain('Another result');
+    });
+
+    it("should handle multiline expected results", () => {
+      const steps = "1. Test step|Line 1\nLine 2\nLine 3";
+      
+      const xml = convertStepsToXml(steps);
+      
+      expect(xml).toContain('Test step');
+      expect(xml).toContain('Line 1');
+      // Note: The split by newline will treat "Line 2" and "Line 3" as separate steps
+      // This is the current behavior - could be enhanced in future if needed
+    });
+
+    it("should generate valid XML structure for Azure DevOps", () => {
+      const steps = "1. Step one|Result one\n2. Step two|Result two";
+      
+      const xml = convertStepsToXml(steps);
+      
+      // Validate XML structure
+      expect(xml).toMatch(/^<steps id="0" last="\d+">.*<\/steps>$/s);
+      expect(xml).toMatch(/<step id="\d+" type="ActionStep">/g);
+      expect(xml).toMatch(/<parameterizedString isformatted="true">.*<\/parameterizedString>/g);
+      
+      // Should not contain any malformed elements
+      expect(xml).not.toMatch(/<parameterizedString(?!\s+isformatted="true").*?>/);
+      expect(xml).not.toContain('<description>');
     });
   });
 

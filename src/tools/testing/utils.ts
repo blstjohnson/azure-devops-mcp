@@ -6,48 +6,94 @@ import { TestingError, ErrorCodes, ToolResponse, PaginationInfo, ResponseMetadat
 /**
  * Create a testing-specific error with proper structure
  */
+/**
+ * Custom testing error class that properly implements TestingError interface
+ */
+class CustomTestingError extends Error implements TestingError {
+  code: ErrorCodes;
+  details?: any;
+  suggestions?: string[];
+
+  constructor(code: ErrorCodes, message: string, details?: any, suggestions?: string[]) {
+    // Ensure message is always a safe string for Error constructor
+    const safeMessage = message != null ? String(message) : 'Unknown error';
+    super(safeMessage);
+    this.name = 'TestingError';
+    this.code = code;
+    this.details = details;
+    this.suggestions = suggestions;
+    
+    Object.setPrototypeOf(this, CustomTestingError.prototype);
+  }
+}
+
 export function createTestingError(
   code: ErrorCodes,
   message: string,
   details?: any,
   suggestions?: string[]
 ): TestingError {
-  const error = new Error(message) as TestingError;
-  error.code = code;
-  error.details = details;
-  error.suggestions = suggestions;
-  return error;
+  return new CustomTestingError(code, message, details, suggestions);
 }
 
 /**
  * Parse Azure DevOps API error responses
  */
 export function parseAzureDevOpsError(error: any): TestingError {
+  // Ensure error is an object
+  if (!error) {
+    return createTestingError(
+      ErrorCodes.OPERATION_FAILED,
+      "Unknown error occurred",
+      {},
+      []
+    );
+  }
+
+  // Handle string errors
+  if (typeof error === 'string') {
+    return createTestingError(
+      ErrorCodes.OPERATION_FAILED,
+      error,
+      {},
+      []
+    );
+  }
+
+  // Handle response data errors
   if (error.response?.data) {
     const errorData = error.response.data;
     
     if (errorData.message) {
       return createTestingError(
         ErrorCodes.OPERATION_FAILED,
-        errorData.message,
+        String(errorData.message || "API error"),
         errorData,
-        errorData.typeKey ? [`Check ${errorData.typeKey} documentation`] : undefined
+        errorData.typeKey ? [`Check ${errorData.typeKey} documentation`] : []
       );
     }
   }
 
-  if (error.message) {
-    return createTestingError(
-      ErrorCodes.OPERATION_FAILED,
-      error.message,
-      error
-    );
+  // Handle error message properly with null checks
+  let message = "Unknown Azure DevOps API error";
+  let details = {};
+  let suggestions: string[] = [];
+  
+  if (error && typeof error === 'object') {
+    if (error.message && typeof error.message === 'string') {
+      message = error.message;
+    } else if (error.message) {
+      // Convert non-string message to string
+      message = String(error.message);
+    }
+    details = error;
   }
 
   return createTestingError(
     ErrorCodes.OPERATION_FAILED,
-    "Unknown Azure DevOps API error",
-    error
+    message,
+    details,
+    suggestions
   );
 }
 
@@ -118,6 +164,11 @@ export function createToolResponse<T>(
 
 /**
  * Convert test steps string to XML format required by Azure DevOps
+ * This function ensures Azure DevOps Web UI compatibility by:
+ * - Always including required isformatted="true" attributes
+ * - Enforcing consistent structure with exactly 2 parameterizedString elements per step
+ * - Properly escaping XML special characters
+ * - Handling missing expected results gracefully
  */
 export function convertStepsToXml(steps: string): string {
   if (!steps || steps.trim() === "") {
@@ -125,6 +176,11 @@ export function convertStepsToXml(steps: string): string {
   }
 
   const stepsLines = steps.split("\n").filter((line) => line.trim() !== "");
+  
+  if (stepsLines.length === 0) {
+    return "";
+  }
+
   let xmlSteps = `<steps id="0" last="${stepsLines.length}">`;
 
   for (let i = 0; i < stepsLines.length; i++) {
@@ -133,13 +189,32 @@ export function convertStepsToXml(steps: string): string {
       // Split step and expected result by '|', fallback to default if not provided
       const [stepPart, expectedPart] = stepLine.split("|").map((s) => s.trim());
       const stepMatch = stepPart.match(/^(\d+)\.\s*(.+)$/);
-      const stepText = stepMatch ? stepMatch[2] : stepPart;
+      
+      let stepText;
+      if (stepMatch) {
+        // We have a numbered step with content
+        stepText = stepMatch[2];
+      } else {
+        // Check if it's just a number with dot but no content
+        const numberOnlyMatch = stepPart.match(/^(\d+)\.\s*$/);
+        if (numberOnlyMatch) {
+          stepText = ""; // Empty step text, will use fallback
+        } else {
+          stepText = stepPart; // Use the whole stepPart as step text
+        }
+      }
+      
       const expectedText = expectedPart || "Verify step completes successfully";
+
+      // Ensure both step text and expected result are present and non-empty
+      // Handle case where stepText is empty or just whitespace after number parsing
+      const finalStepText = (stepText && stepText.trim()) ? stepText.trim() : `Step ${i + 1}`;
+      const finalExpectedText = expectedText || "Verify step completes successfully";
 
       xmlSteps += `
                 <step id="${i + 1}" type="ActionStep">
-                    <parameterizedString isformatted="true">${escapeXml(stepText)}</parameterizedString>
-                    <parameterizedString isformatted="true">${escapeXml(expectedText)}</parameterizedString>
+                    <parameterizedString isformatted="true">${escapeXml(finalStepText)}</parameterizedString>
+                    <parameterizedString isformatted="true">${escapeXml(finalExpectedText)}</parameterizedString>
                 </step>`;
     }
   }
@@ -736,3 +811,684 @@ export function safeStringify(obj: any, space?: number): string {
       dependencyOrder
     };
   }
+
+/**
+ * Analytics and Reporting Utilities
+ */
+
+/**
+ * Calculate flakiness score for a test case based on execution history
+ */
+export function calculateFlakinessScore(
+  executions: Array<{ outcome: string; date: Date }>,
+  confidenceLevel: number = 0.85
+): {
+  score: number;
+  confidence: number;
+  isFlaky: boolean;
+  trend: 'increasing' | 'decreasing' | 'stable';
+} {
+  if (executions.length < 3) {
+    return {
+      score: 0,
+      confidence: 0,
+      isFlaky: false,
+      trend: 'stable'
+    };
+  }
+
+  const totalExecutions = executions.length;
+  const failures = executions.filter(e => e.outcome === 'Failed').length;
+  const failureRate = failures / totalExecutions;
+
+  // Calculate confidence using binomial confidence interval
+  const z = confidenceLevel === 0.85 ? 1.44 : 1.96; // Z-score for 85% or 95%
+  const marginOfError = z * Math.sqrt((failureRate * (1 - failureRate)) / totalExecutions);
+  const confidence = Math.max(0, 1 - (2 * marginOfError));
+
+  // Calculate trend over time (recent vs older executions)
+  const midPoint = Math.floor(totalExecutions / 2);
+  const recentExecutions = executions.slice(midPoint);
+  const olderExecutions = executions.slice(0, midPoint);
+  
+  const recentFailureRate = recentExecutions.filter(e => e.outcome === 'Failed').length / recentExecutions.length;
+  const olderFailureRate = olderExecutions.filter(e => e.outcome === 'Failed').length / olderExecutions.length;
+  
+  let trend: 'increasing' | 'decreasing' | 'stable' = 'stable';
+  const trendThreshold = 0.1;
+  if (recentFailureRate - olderFailureRate > trendThreshold) {
+    trend = 'increasing';
+  } else if (olderFailureRate - recentFailureRate > trendThreshold) {
+    trend = 'decreasing';
+  }
+
+  const score = failureRate;
+  const isFlaky = score > 0.1 && score < 0.9 && confidence > confidenceLevel;
+
+  return {
+    score,
+    confidence,
+    isFlaky,
+    trend
+  };
+}
+
+/**
+ * Calculate quality metrics for a test suite
+ */
+export function calculateQualityMetrics(
+  testResults: Array<{
+    testId: number;
+    outcome: string;
+    duration: number;
+    isAutomated: boolean;
+    defectsFound: number;
+  }>,
+  testCoverage?: number
+): {
+  passRate: number;
+  automationRate: number;
+  testEfficiency: number;
+  defectDensity: number;
+  testCoverage?: number;
+} {
+  if (testResults.length === 0) {
+    return {
+      passRate: 0,
+      automationRate: 0,
+      testEfficiency: 0,
+      defectDensity: 0,
+      testCoverage
+    };
+  }
+
+  const totalTests = testResults.length;
+  const passedTests = testResults.filter(t => t.outcome === 'Passed').length;
+  const automatedTests = testResults.filter(t => t.isAutomated).length;
+  const totalDefects = testResults.reduce((sum, t) => sum + t.defectsFound, 0);
+  const totalDuration = testResults.reduce((sum, t) => sum + t.duration, 0);
+  const averageDuration = totalDuration / totalTests;
+
+  return {
+    passRate: (passedTests / totalTests) * 100,
+    automationRate: (automatedTests / totalTests) * 100,
+    testEfficiency: totalDefects > 0 ? (totalDefects / (totalDuration / 1000 / 60)) : 0, // defects per minute
+    defectDensity: totalDefects / totalTests,
+    testCoverage
+  };
+}
+
+/**
+ * Analyze performance trends and detect regressions
+ */
+export function analyzePerformanceTrends(
+  performanceData: Array<{
+    date: Date;
+    executionTime: number;
+    throughput: number;
+    resourceUsage?: number;
+  }>,
+  regressionSensitivity: number = 0.1
+): {
+  trends: {
+    executionTimeTrend: number;
+    throughputTrend: number;
+    resourceUsageTrend?: number;
+  };
+  regressions: Array<{
+    date: Date;
+    metric: string;
+    change: number;
+    severity: 'low' | 'medium' | 'high';
+  }>;
+  recommendations: string[];
+} {
+  if (performanceData.length < 2) {
+    return {
+      trends: { executionTimeTrend: 0, throughputTrend: 0 },
+      regressions: [],
+      recommendations: []
+    };
+  }
+
+  // Sort by date
+  const sortedData = performanceData.sort((a, b) => a.date.getTime() - b.date.getTime());
+  
+  // Calculate trends using linear regression
+  const executionTimeTrend = calculateTrend(sortedData.map(d => d.executionTime));
+  const throughputTrend = calculateTrend(sortedData.map(d => d.throughput));
+  const resourceUsageTrend = sortedData[0].resourceUsage !== undefined
+    ? calculateTrend(sortedData.map(d => d.resourceUsage!).filter(r => r !== undefined))
+    : undefined;
+
+  // Detect regressions
+  const regressions: Array<{
+    date: Date;
+    metric: string;
+    change: number;
+    severity: 'low' | 'medium' | 'high';
+  }> = [];
+
+  for (let i = 1; i < sortedData.length; i++) {
+    const prev = sortedData[i - 1];
+    const curr = sortedData[i];
+
+    // Check execution time regression
+    const executionTimeChange = (curr.executionTime - prev.executionTime) / prev.executionTime;
+    if (executionTimeChange > regressionSensitivity) {
+      regressions.push({
+        date: curr.date,
+        metric: 'executionTime',
+        change: executionTimeChange,
+        severity: executionTimeChange > 0.3 ? 'high' : executionTimeChange > 0.15 ? 'medium' : 'low'
+      });
+    }
+
+    // Check throughput regression
+    const throughputChange = (prev.throughput - curr.throughput) / prev.throughput;
+    if (throughputChange > regressionSensitivity) {
+      regressions.push({
+        date: curr.date,
+        metric: 'throughput',
+        change: throughputChange,
+        severity: throughputChange > 0.3 ? 'high' : throughputChange > 0.15 ? 'medium' : 'low'
+      });
+    }
+  }
+
+  // Generate recommendations
+  const recommendations: string[] = [];
+  if (executionTimeTrend > 0.1) {
+    recommendations.push("Execution times are trending upward. Consider optimizing test logic or reviewing test environment performance.");
+  }
+  if (throughputTrend < -0.1) {
+    recommendations.push("Test throughput is declining. Review test parallelization and resource allocation.");
+  }
+  if (regressions.filter(r => r.severity === 'high').length > 0) {
+    recommendations.push("High-severity performance regressions detected. Immediate investigation recommended.");
+  }
+
+  return {
+    trends: {
+      executionTimeTrend,
+      throughputTrend,
+      resourceUsageTrend
+    },
+    regressions,
+    recommendations
+  };
+}
+
+/**
+ * Calculate linear trend using least squares method
+ */
+function calculateTrend(values: number[]): number {
+  if (values.length < 2) return 0;
+
+  const n = values.length;
+  const x = Array.from({ length: n }, (_, i) => i);
+  
+  const sumX = x.reduce((a, b) => a + b, 0);
+  const sumY = values.reduce((a, b) => a + b, 0);
+  const sumXY = x.reduce((sum, xi, i) => sum + xi * values[i], 0);
+  const sumXX = x.reduce((sum, xi) => sum + xi * xi, 0);
+  
+  const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+  return slope;
+}
+
+/**
+ * Assess risk factors for test execution
+ */
+export function assessRiskFactors(
+  testData: {
+    testCoverage: number;
+    codeComplexity: number;
+    changeFrequency: number;
+    defectHistory: number;
+    teamExperience: number;
+    dependencies: number;
+  },
+  riskThresholds: {
+    lowThreshold: number;
+    mediumThreshold: number;
+    highThreshold: number;
+  } = { lowThreshold: 0.2, mediumThreshold: 0.5, highThreshold: 0.8 }
+): {
+  overallRiskScore: number;
+  riskLevel: 'low' | 'medium' | 'high' | 'critical';
+  riskFactors: Array<{
+    factor: string;
+    score: number;
+    weight: number;
+    contribution: number;
+  }>;
+  recommendations: string[];
+} {
+  // Define weights for each risk factor
+  const weights = {
+    testCoverage: 0.25,      // Higher coverage = lower risk
+    codeComplexity: 0.20,    // Higher complexity = higher risk
+    changeFrequency: 0.15,   // Higher frequency = higher risk
+    defectHistory: 0.20,     // More defects = higher risk
+    teamExperience: 0.10,    // More experience = lower risk
+    dependencies: 0.10       // More dependencies = higher risk
+  };
+
+  // Normalize scores (0-1, where 1 is highest risk)
+  const normalizedScores = {
+    testCoverage: 1 - Math.min(testData.testCoverage / 100, 1), // Invert for risk
+    codeComplexity: Math.min(testData.codeComplexity / 100, 1),
+    changeFrequency: Math.min(testData.changeFrequency / 100, 1),
+    defectHistory: Math.min(testData.defectHistory / 100, 1),
+    teamExperience: 1 - Math.min(testData.teamExperience / 100, 1), // Invert for risk
+    dependencies: Math.min(testData.dependencies / 100, 1)
+  };
+
+  // Calculate weighted risk score
+  const riskFactors = Object.entries(normalizedScores).map(([factor, score]) => ({
+    factor,
+    score,
+    weight: weights[factor as keyof typeof weights],
+    contribution: score * weights[factor as keyof typeof weights]
+  }));
+
+  const overallRiskScore = riskFactors.reduce((sum, rf) => sum + rf.contribution, 0);
+
+  // Determine risk level
+  let riskLevel: 'low' | 'medium' | 'high' | 'critical';
+  if (overallRiskScore <= riskThresholds.lowThreshold) {
+    riskLevel = 'low';
+  } else if (overallRiskScore <= riskThresholds.mediumThreshold) {
+    riskLevel = 'medium';
+  } else if (overallRiskScore <= riskThresholds.highThreshold) {
+    riskLevel = 'high';
+  } else {
+    riskLevel = 'critical';
+  }
+
+  // Generate recommendations
+  const recommendations: string[] = [];
+  if (normalizedScores.testCoverage > 0.6) {
+    recommendations.push("Increase test coverage to reduce risk of undetected issues.");
+  }
+  if (normalizedScores.codeComplexity > 0.7) {
+    recommendations.push("Consider refactoring complex code areas and adding focused tests.");
+  }
+  if (normalizedScores.defectHistory > 0.5) {
+    recommendations.push("Focus additional testing on areas with high defect history.");
+  }
+  if (normalizedScores.teamExperience > 0.6) {
+    recommendations.push("Consider additional training or mentoring for the team.");
+  }
+
+  return {
+    overallRiskScore,
+    riskLevel,
+    riskFactors,
+    recommendations
+  };
+}
+
+/**
+ * Calculate team productivity metrics
+ */
+export function calculateTeamProductivity(
+  teamData: {
+    testsCreated: number;
+    testsExecuted: number;
+    defectsFound: number;
+    automationContributions: number;
+    codeReviewParticipation: number;
+    timeSpent: number; // in hours
+  },
+  benchmarkData?: {
+    testsCreatedPerHour: number;
+    defectsFoundPerHour: number;
+    automationRate: number;
+  }
+): {
+  testCreationRate: number;
+  executionEfficiency: number;
+  defectDetectionRate: number;
+  automationProgress: number;
+  velocity: number;
+  benchmarkComparison?: {
+    testCreationVsBenchmark: number;
+    defectDetectionVsBenchmark: number;
+    automationVsBenchmark: number;
+  };
+} {
+  const timeSpentHours = teamData.timeSpent;
+
+  const metrics = {
+    testCreationRate: timeSpentHours > 0 ? teamData.testsCreated / timeSpentHours : 0,
+    executionEfficiency: teamData.testsCreated > 0 ? teamData.testsExecuted / teamData.testsCreated : 0,
+    defectDetectionRate: timeSpentHours > 0 ? teamData.defectsFound / timeSpentHours : 0,
+    automationProgress: teamData.testsCreated > 0 ? teamData.automationContributions / teamData.testsCreated : 0,
+    velocity: timeSpentHours > 0 ? (teamData.testsCreated + teamData.testsExecuted + teamData.defectsFound) / timeSpentHours : 0
+  };
+
+  let benchmarkComparison;
+  if (benchmarkData) {
+    benchmarkComparison = {
+      testCreationVsBenchmark: benchmarkData.testsCreatedPerHour > 0 ?
+        (metrics.testCreationRate / benchmarkData.testsCreatedPerHour) * 100 : 0,
+      defectDetectionVsBenchmark: benchmarkData.defectsFoundPerHour > 0 ?
+        (metrics.defectDetectionRate / benchmarkData.defectsFoundPerHour) * 100 : 0,
+      automationVsBenchmark: benchmarkData.automationRate > 0 ?
+        (metrics.automationProgress / benchmarkData.automationRate) * 100 : 0
+    };
+  }
+
+  return {
+    ...metrics,
+    benchmarkComparison
+  };
+}
+
+/**
+ * Generate report data in specified format
+ */
+export function formatReportData(
+  data: any,
+  format: 'pdf' | 'excel' | 'html' | 'json' | 'csv'
+): {
+  formattedData: any;
+  mimeType: string;
+  fileExtension: string;
+} {
+  switch (format) {
+    case 'json':
+      return {
+        formattedData: JSON.stringify(data, null, 2),
+        mimeType: 'application/json',
+        fileExtension: '.json'
+      };
+    
+    case 'csv':
+      return {
+        formattedData: convertToCSV(data),
+        mimeType: 'text/csv',
+        fileExtension: '.csv'
+      };
+    
+    case 'html':
+      return {
+        formattedData: convertToHTML(data),
+        mimeType: 'text/html',
+        fileExtension: '.html'
+      };
+    
+    case 'excel':
+      return {
+        formattedData: data, // Would need actual Excel formatting library
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        fileExtension: '.xlsx'
+      };
+    
+    case 'pdf':
+      return {
+        formattedData: data, // Would need actual PDF generation library
+        mimeType: 'application/pdf',
+        fileExtension: '.pdf'
+      };
+    
+    default:
+      return {
+        formattedData: JSON.stringify(data, null, 2),
+        mimeType: 'application/json',
+        fileExtension: '.json'
+      };
+  }
+}
+
+/**
+ * Convert data to CSV format
+ */
+function convertToCSV(data: any): string {
+  if (!Array.isArray(data)) {
+    data = [data];
+  }
+
+  if (data.length === 0) {
+    return '';
+  }
+
+  // Get headers from first object
+  const headers = Object.keys(data[0]);
+  const csvHeaders = headers.join(',');
+
+  // Convert rows
+  const csvRows = data.map((row: any) =>
+    headers.map(header => {
+      const value = row[header];
+      // Escape commas and quotes
+      if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
+        return `"${value.replace(/"/g, '""')}"`;
+      }
+      return value;
+    }).join(',')
+  );
+
+  return [csvHeaders, ...csvRows].join('\n');
+}
+
+/**
+ * Convert data to HTML table format
+ */
+function convertToHTML(data: any): string {
+  if (!Array.isArray(data)) {
+    data = [data];
+  }
+
+  if (data.length === 0) {
+    return '<p>No data available</p>';
+  }
+
+  const headers = Object.keys(data[0]);
+  
+  const headerRow = `<tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>`;
+  const dataRows = data.map((row: any) =>
+    `<tr>${headers.map(h => `<td>${row[h] || ''}</td>`).join('')}</tr>`
+  ).join('');
+
+  return `
+    <table border="1" style="border-collapse: collapse;">
+      <thead>${headerRow}</thead>
+      <tbody>${dataRows}</tbody>
+    </table>
+  `;
+}
+
+/**
+ * Create dashboard widget configuration
+ */
+export function createDashboardWidget(
+  widgetType: 'chart' | 'table' | 'metric' | 'gauge' | 'trend' | 'heatmap',
+  title: string,
+  dataQuery: string,
+  position: { x: number; y: number; width: number; height: number },
+  options: {
+    chartType?: 'line' | 'bar' | 'pie' | 'area' | 'scatter';
+    colors?: string[];
+    refreshInterval?: number;
+    thresholds?: { low: number; medium: number; high: number };
+  } = {}
+): any {
+  const baseWidget = {
+    widgetId: generateOperationId(),
+    widgetType,
+    title,
+    position,
+    dataSource: {
+      query: dataQuery,
+      refreshInterval: options.refreshInterval || 300,
+      parameters: {}
+    }
+  };
+
+  if (widgetType === 'chart') {
+    return {
+      ...baseWidget,
+      visualization: {
+        chartType: options.chartType || 'line',
+        colors: options.colors || ['#0078D4', '#106EBE', '#FFB900'],
+        formatting: {
+          showLegend: true,
+          showDataLabels: false
+        }
+      }
+    };
+  }
+
+  if (widgetType === 'gauge' || widgetType === 'metric') {
+    return {
+      ...baseWidget,
+      visualization: {
+        thresholds: options.thresholds || { low: 30, medium: 70, high: 90 },
+        colors: options.colors || ['#D13438', '#FFB900', '#107C10'],
+        formatting: {
+          showValue: true,
+          showPercentage: widgetType === 'gauge'
+        }
+      }
+    };
+  }
+
+  return baseWidget;
+}
+
+/**
+ * Validate dashboard layout configuration
+ */
+export function validateDashboardLayout(
+  widgets: Array<{
+    position: { x: number; y: number; width: number; height: number };
+  }>,
+  gridSize: { columns: number; rows: number }
+): {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+} {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  // Check for overlapping widgets
+  for (let i = 0; i < widgets.length; i++) {
+    for (let j = i + 1; j < widgets.length; j++) {
+      const widget1 = widgets[i];
+      const widget2 = widgets[j];
+
+      if (isOverlapping(widget1.position, widget2.position)) {
+        errors.push(`Widget at position (${widget1.position.x}, ${widget1.position.y}) overlaps with widget at (${widget2.position.x}, ${widget2.position.y})`);
+      }
+    }
+  }
+
+  // Check widgets fit within grid
+  for (const widget of widgets) {
+    if (widget.position.x + widget.position.width > gridSize.columns) {
+      errors.push(`Widget extends beyond grid width at position (${widget.position.x}, ${widget.position.y})`);
+    }
+    if (widget.position.y + widget.position.height > gridSize.rows) {
+      errors.push(`Widget extends beyond grid height at position (${widget.position.x}, ${widget.position.y})`);
+    }
+  }
+
+  // Check for optimal layout
+  const totalWidgetArea = widgets.reduce((sum, w) => sum + (w.position.width * w.position.height), 0);
+  const totalGridArea = gridSize.columns * gridSize.rows;
+  const utilizationRate = totalWidgetArea / totalGridArea;
+
+  if (utilizationRate < 0.3) {
+    warnings.push('Dashboard has low space utilization. Consider resizing widgets or reducing grid size.');
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings
+  };
+}
+
+/**
+ * Check if two rectangles overlap
+ */
+function isOverlapping(
+  rect1: { x: number; y: number; width: number; height: number },
+  rect2: { x: number; y: number; width: number; height: number }
+): boolean {
+  return !(
+    rect1.x + rect1.width <= rect2.x ||
+    rect2.x + rect2.width <= rect1.x ||
+    rect1.y + rect1.height <= rect2.y ||
+    rect2.y + rect2.height <= rect1.y
+  );
+}
+
+/**
+ * Generate alert condition based on metric thresholds
+ */
+export function generateAlertCondition(
+  metric: string,
+  threshold: number,
+  operator: 'gt' | 'lt' | 'eq' | 'gte' | 'lte'
+): string {
+  const operatorMap = {
+    'gt': '>',
+    'lt': '<',
+    'eq': '==',
+    'gte': '>=',
+    'lte': '<='
+  };
+
+  return `${metric} ${operatorMap[operator]} ${threshold}`;
+}
+
+/**
+ * Calculate data transformation statistics
+ */
+export function calculateTransformationStats(
+  originalData: any[],
+  transformedData: any[],
+  transformations: Array<{ type: string; fieldsAffected: string[] }>
+): {
+  recordsProcessed: number;
+  recordsFiltered: number;
+  fieldsMapped: number;
+  transformationsSummary: Array<{
+    type: string;
+    fieldsAffected: number;
+    recordsAffected: number;
+  }>;
+} {
+  const recordsProcessed = originalData.length;
+  const recordsFiltered = originalData.length - transformedData.length;
+  
+  const allFields = new Set<string>();
+  originalData.forEach(record => {
+    Object.keys(record).forEach(field => allFields.add(field));
+  });
+  transformedData.forEach(record => {
+    Object.keys(record).forEach(field => allFields.add(field));
+  });
+
+  const fieldsMapped = allFields.size;
+
+  const transformationsSummary = transformations.map(transformation => ({
+    type: transformation.type,
+    fieldsAffected: transformation.fieldsAffected.length,
+    recordsAffected: transformedData.filter(record =>
+      transformation.fieldsAffected.some(field => record[field] !== undefined)
+    ).length
+  }));
+
+  return {
+    recordsProcessed,
+    recordsFiltered,
+    fieldsMapped,
+    transformationsSummary
+  };
+}

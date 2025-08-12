@@ -1144,3 +1144,616 @@ export interface TestDataOperation {
   errors?: string[];
   warnings?: string[];
 }
+
+// Test Analytics Schemas
+export const detectFlakyTestsSchema = z.object({
+  project: projectValidation.describe("Project ID or name"),
+  planIds: z.array(idValidation).optional().describe("Test plan IDs to analyze"),
+  suiteIds: z.array(idValidation).optional().describe("Test suite IDs to analyze"),
+  timeframe: z.object({
+    startDate: z.coerce.date().describe("Analysis start date"),
+    endDate: z.coerce.date().describe("Analysis end date")
+  }).describe("Time period for flaky test analysis"),
+  minExecutions: z.number().int().min(3).max(1000).default(5)
+    .describe("Minimum executions required for flakiness analysis"),
+  flakinessThreshold: z.number().min(0.1).max(0.9).default(0.3)
+    .describe("Flakiness threshold (0.3 = 30% failure rate)"),
+  confidenceLevel: z.number().min(0.8).max(0.99).default(0.85)
+    .describe("Statistical confidence level for analysis"),
+  includeEnvironmentCorrelation: z.boolean().default(true)
+    .describe("Include environment correlation in analysis"),
+  groupBy: z.enum(["testCase", "suite", "configuration", "environment"]).default("testCase")
+    .describe("Group flaky tests by category"),
+  outputFormat: z.enum(["summary", "detailed", "statistical"]).default("detailed")
+    .describe("Analysis output format")
+});
+
+export const qualityMetricsSchema = z.object({
+  project: projectValidation.describe("Project ID or name"),
+  scope: z.object({
+    planIds: z.array(idValidation).optional().describe("Test plan IDs to analyze"),
+    suiteIds: z.array(idValidation).optional().describe("Test suite IDs to analyze"),
+    testCaseIds: z.array(idValidation).optional().describe("Specific test case IDs")
+  }).describe("Analysis scope definition"),
+  timeframe: z.object({
+    startDate: z.coerce.date().describe("Metrics calculation start date"),
+    endDate: z.coerce.date().describe("Metrics calculation end date")
+  }).describe("Time period for quality metrics"),
+  metrics: z.array(z.enum([
+    "passRate", "testCoverage", "defectDensity", "automationRate",
+    "testEfficiency", "reliabilityIndex", "maintainabilityScore"
+  ])).default(["passRate", "testCoverage", "automationRate"])
+    .describe("Quality metrics to calculate"),
+  includeComparison: z.boolean().default(true)
+    .describe("Include comparison with previous period"),
+  comparisonPeriod: z.enum(["previousWeek", "previousMonth", "previousQuarter", "yearOverYear"])
+    .default("previousMonth").describe("Comparison period reference"),
+  benchmarkData: z.boolean().default(false)
+    .describe("Include industry benchmark data"),
+  includeRecommendations: z.boolean().default(true)
+    .describe("Include improvement recommendations"),
+  aggregationLevel: z.enum(["daily", "weekly", "monthly"]).default("weekly")
+    .describe("Data aggregation level")
+});
+
+export const performanceAnalysisSchema = z.object({
+  project: projectValidation.describe("Project ID or name"),
+  scope: z.object({
+    planIds: z.array(idValidation).optional().describe("Test plan IDs to analyze"),
+    suiteIds: z.array(idValidation).optional().describe("Test suite IDs to analyze"),
+    configurationIds: z.array(idValidation).optional().describe("Configuration IDs to analyze")
+  }).describe("Performance analysis scope"),
+  timeframe: z.object({
+    startDate: z.coerce.date().describe("Analysis start date"),
+    endDate: z.coerce.date().describe("Analysis end date")
+  }).describe("Time period for performance analysis"),
+  analysisTypes: z.array(z.enum([
+    "executionTime", "throughput", "resourceUsage", "bottlenecks",
+    "trends", "regressions", "optimization"
+  ])).default(["executionTime", "throughput", "trends"])
+    .describe("Types of performance analysis to perform"),
+  performanceThresholds: z.object({
+    maxExecutionTime: z.number().min(1).optional().describe("Maximum acceptable execution time in seconds"),
+    minThroughput: z.number().min(0.1).optional().describe("Minimum acceptable tests per minute"),
+    maxResourceUsage: z.number().min(1).max(100).optional().describe("Maximum resource usage percentage")
+  }).optional().describe("Performance threshold definitions"),
+  includeRegression: z.boolean().default(true)
+    .describe("Include regression analysis"),
+  regressionSensitivity: z.number().min(0.05).max(0.5).default(0.1)
+    .describe("Regression detection sensitivity (0.1 = 10% change)"),
+  includeOptimizationSuggestions: z.boolean().default(true)
+    .describe("Include performance optimization suggestions"),
+  statisticalAnalysis: z.boolean().default(true)
+    .describe("Include statistical performance analysis")
+});
+
+export const riskAssessmentSchema = z.object({
+  project: projectValidation.describe("Project ID or name"),
+  scope: z.object({
+    planIds: z.array(idValidation).optional().describe("Test plan IDs to assess"),
+    suiteIds: z.array(idValidation).optional().describe("Test suite IDs to assess"),
+    areaPath: pathValidation.optional().describe("Area path to focus assessment on")
+  }).describe("Risk assessment scope"),
+  riskFactors: z.array(z.enum([
+    "testCoverage", "codeComplexity", "changeFrequency", "defectHistory",
+    "teamExperience", "dependencies", "criticalPath", "performance"
+  ])).default(["testCoverage", "defectHistory", "dependencies"])
+    .describe("Risk factors to analyze"),
+  assessmentPeriod: z.object({
+    startDate: z.coerce.date().describe("Assessment period start date"),
+    endDate: z.coerce.date().describe("Assessment period end date")
+  }).describe("Time period for historical risk data"),
+  riskLevels: z.object({
+    lowThreshold: z.number().min(0).max(0.5).default(0.2).describe("Low risk threshold"),
+    mediumThreshold: z.number().min(0.2).max(0.7).default(0.5).describe("Medium risk threshold"),
+    highThreshold: z.number().min(0.5).max(1.0).default(0.8).describe("High risk threshold")
+  }).optional().describe("Risk level threshold definitions"),
+  includePredictiveAnalysis: z.boolean().default(true)
+    .describe("Include predictive failure analysis"),
+  predictionHorizon: z.number().min(1).max(365).default(30)
+    .describe("Prediction horizon in days"),
+  includeRecommendations: z.boolean().default(true)
+    .describe("Include risk mitigation recommendations"),
+  prioritizeByImpact: z.boolean().default(true)
+    .describe("Prioritize risks by business impact")
+});
+
+export const teamProductivitySchema = z.object({
+  project: projectValidation.describe("Project ID or name"),
+  teamScope: z.object({
+    teamIds: z.array(z.string()).optional().describe("Specific team IDs to analyze"),
+    userIds: z.array(z.string()).optional().describe("Specific user IDs to analyze"),
+    includeAllContributors: z.boolean().default(true).describe("Include all test contributors")
+  }).describe("Team scope for productivity analysis"),
+  timeframe: z.object({
+    startDate: z.coerce.date().describe("Analysis start date"),
+    endDate: z.coerce.date().describe("Analysis end date")
+  }).describe("Time period for productivity analysis"),
+  productivityMetrics: z.array(z.enum([
+    "testCreationRate", "executionEfficiency", "defectDetectionRate",
+    "automationProgress", "codeQuality", "collaboration", "velocity"
+  ])).default(["testCreationRate", "executionEfficiency", "automationProgress"])
+    .describe("Productivity metrics to calculate"),
+  benchmarkType: z.enum(["team", "project", "organization", "industry"]).default("team")
+    .describe("Benchmark comparison type"),
+  includeIndividualMetrics: z.boolean().default(false)
+    .describe("Include individual contributor metrics"),
+  anonymizeResults: z.boolean().default(true)
+    .describe("Anonymize individual results in reports"),
+  includeRecommendations: z.boolean().default(true)
+    .describe("Include productivity improvement recommendations"),
+  aggregationLevel: z.enum(["daily", "weekly", "monthly"]).default("weekly")
+    .describe("Data aggregation level"),
+  includeCapacityPlanning: z.boolean().default(true)
+    .describe("Include capacity planning insights")
+});
+
+// Test Reporting Schemas
+export const generateStandardReportsSchema = z.object({
+  project: projectValidation.describe("Project ID or name"),
+  reportTypes: z.array(z.enum([
+    "testExecution", "testCoverage", "defectSummary", "automationProgress",
+    "qualityMetrics", "performanceSummary", "teamProductivity", "riskAssessment"
+  ])).min(1).describe("Types of standard reports to generate"),
+  scope: z.object({
+    planIds: z.array(idValidation).optional().describe("Test plan IDs to include"),
+    suiteIds: z.array(idValidation).optional().describe("Test suite IDs to include"),
+    configurationIds: z.array(idValidation).optional().describe("Configuration IDs to include")
+  }).describe("Report scope definition"),
+  timeframe: z.object({
+    startDate: z.coerce.date().describe("Report start date"),
+    endDate: z.coerce.date().describe("Report end date"),
+    comparisonPeriod: z.enum(["none", "previousWeek", "previousMonth", "previousQuarter"])
+      .default("previousMonth").describe("Comparison period for trends")
+  }).describe("Report time period"),
+  outputFormats: z.array(z.enum(["pdf", "excel", "html", "json", "csv"]))
+    .default(["pdf", "html"]).describe("Output formats for reports"),
+  customization: z.object({
+    includeCharts: z.boolean().default(true).describe("Include charts and visualizations"),
+    includeTables: z.boolean().default(true).describe("Include data tables"),
+    includeExecutiveSummary: z.boolean().default(true).describe("Include executive summary"),
+    includeDetailedAnalysis: z.boolean().default(false).describe("Include detailed analysis sections"),
+    brandingTemplate: z.string().optional().describe("Custom branding template ID")
+  }).optional().describe("Report customization options"),
+  distribution: z.object({
+    recipients: z.array(z.string().email()).optional().describe("Email recipients for reports"),
+    shareLocation: z.string().optional().describe("Shared location for report storage"),
+    scheduledDelivery: z.boolean().default(false).describe("Enable scheduled report delivery"),
+    retentionDays: z.number().min(1).max(365).default(90).describe("Report retention period")
+  }).optional().describe("Report distribution settings")
+});
+
+export const createCustomReportsSchema = z.object({
+  project: projectValidation.describe("Project ID or name"),
+  reportDefinition: z.object({
+    name: nameValidation.describe("Custom report name"),
+    description: z.string().max(1000).optional().describe("Report description"),
+    category: z.string().max(100).optional().describe("Report category"),
+    template: z.enum(["blank", "executive", "technical", "comparison", "trend"])
+      .default("blank").describe("Base template to use")
+  }).describe("Custom report definition"),
+  dataSource: z.object({
+    planIds: z.array(idValidation).optional().describe("Test plan data sources"),
+    suiteIds: z.array(idValidation).optional().describe("Test suite data sources"),
+    customQueries: z.array(z.object({
+      queryName: z.string().describe("Query identifier"),
+      queryString: z.string().describe("Data query string"),
+      parameters: z.record(z.string(), z.any()).optional().describe("Query parameters")
+    })).optional().describe("Custom data queries")
+  }).describe("Report data sources"),
+  layout: z.object({
+    sections: z.array(z.object({
+      sectionId: z.string().describe("Section identifier"),
+      sectionType: z.enum(["header", "summary", "chart", "table", "text", "image"]),
+      title: z.string().optional().describe("Section title"),
+      content: z.any().describe("Section content definition"),
+      position: z.object({
+        page: z.number().min(1).default(1),
+        order: z.number().min(1).default(1)
+      }).describe("Section position")
+    })).min(1).describe("Report sections")
+  }).describe("Report layout configuration"),
+  formatting: z.object({
+    pageSize: z.enum(["A4", "A3", "Letter", "Legal"]).default("A4"),
+    orientation: z.enum(["portrait", "landscape"]).default("portrait"),
+    margins: z.object({
+      top: z.number().default(25),
+      bottom: z.number().default(25),
+      left: z.number().default(25),
+      right: z.number().default(25)
+    }).optional(),
+    fonts: z.object({
+      headerFont: z.string().default("Arial"),
+      bodyFont: z.string().default("Arial"),
+      fontSize: z.number().min(8).max(24).default(12)
+    }).optional(),
+    colors: z.object({
+      primaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).default("#0078D4"),
+      secondaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).default("#106EBE"),
+      accentColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).default("#FFB900")
+    }).optional()
+  }).optional().describe("Report formatting options"),
+  outputOptions: z.object({
+    formats: z.array(z.enum(["pdf", "excel", "html", "powerpoint", "word"]))
+      .default(["pdf"]).describe("Output formats"),
+    quality: z.enum(["draft", "standard", "high"]).default("standard")
+      .describe("Output quality level"),
+    compression: z.boolean().default(true).describe("Enable output compression")
+  }).optional().describe("Output generation options"),
+  saveAsTemplate: z.boolean().default(false)
+    .describe("Save this report as a reusable template")
+});
+
+export const exportDataSchema = z.object({
+  project: projectValidation.describe("Project ID or name"),
+  dataScope: z.object({
+    planIds: z.array(idValidation).optional().describe("Test plan IDs to export"),
+    suiteIds: z.array(idValidation).optional().describe("Test suite IDs to export"),
+    testCaseIds: z.array(idValidation).optional().describe("Specific test case IDs to export"),
+    runIds: z.array(idValidation).optional().describe("Test run IDs to export")
+  }).describe("Data scope for export"),
+  timeframe: z.object({
+    startDate: z.coerce.date().describe("Export start date"),
+    endDate: z.coerce.date().describe("Export end date"),
+    includeHistorical: z.boolean().default(false).describe("Include historical data beyond timeframe")
+  }).describe("Export time period"),
+  dataTypes: z.array(z.enum([
+    "testCases", "testRuns", "testResults", "defects", "requirements",
+    "configurations", "metrics", "attachments", "comments", "links"
+  ])).min(1).describe("Types of data to export"),
+  exportFormat: z.enum(["excel", "csv", "json", "xml", "sql", "powerbi", "tableau"])
+    .describe("Export file format"),
+  exportOptions: z.object({
+    includeMetadata: z.boolean().default(true).describe("Include metadata in export"),
+    includeRelationships: z.boolean().default(true).describe("Include data relationships"),
+    flattenHierarchy: z.boolean().default(false).describe("Flatten hierarchical data"),
+    includeCalculatedFields: z.boolean().default(true).describe("Include calculated fields"),
+    compression: z.enum(["none", "zip", "gzip"]).default("zip").describe("Export compression"),
+    encoding: z.enum(["utf8", "utf16", "ascii"]).default("utf8").describe("Text encoding")
+  }).optional().describe("Export formatting options"),
+  transformation: z.object({
+    anonymize: z.boolean().default(false).describe("Anonymize personal data"),
+    aggregateData: z.boolean().default(false).describe("Aggregate detailed data"),
+    filterCriteria: z.record(z.string(), z.any()).optional().describe("Data filtering criteria"),
+    customMappings: z.array(z.object({
+      sourceField: z.string(),
+      targetField: z.string(),
+      transformation: z.string().optional()
+    })).optional().describe("Custom field mappings")
+  }).optional().describe("Data transformation options"),
+  destination: z.object({
+    deliveryMethod: z.enum(["download", "email", "ftp", "cloud", "api"]).default("download"),
+    targetLocation: z.string().optional().describe("Target location for delivery"),
+    credentials: z.record(z.string(), z.string()).optional().describe("Delivery credentials"),
+    notificationEmail: z.string().email().optional().describe("Completion notification email")
+  }).optional().describe("Export destination settings")
+});
+
+export const manageDashboardsSchema = z.object({
+  project: projectValidation.describe("Project ID or name"),
+  operation: z.enum(["create", "update", "delete", "list", "share", "configure"])
+    .describe("Dashboard management operation"),
+  dashboardId: z.string().optional().describe("Dashboard ID for update/delete/configure operations"),
+  dashboardDefinition: z.object({
+    name: nameValidation.describe("Dashboard name"),
+    description: z.string().max(1000).optional().describe("Dashboard description"),
+    category: z.string().max(100).optional().describe("Dashboard category"),
+    isPublic: z.boolean().default(false).describe("Whether dashboard is publicly accessible"),
+    tags: z.array(tagValidation).optional().describe("Dashboard tags")
+  }).optional().describe("Dashboard definition for create/update operations"),
+  layout: z.object({
+    gridSize: z.object({
+      columns: z.number().min(1).max(12).default(12),
+      rows: z.number().min(1).max(20).default(8)
+    }).optional(),
+    widgets: z.array(z.object({
+      widgetId: z.string().describe("Widget identifier"),
+      widgetType: z.enum([
+        "chart", "table", "metric", "gauge", "trend", "heatmap", "text", "image"
+      ]).describe("Widget type"),
+      title: z.string().optional().describe("Widget title"),
+      position: z.object({
+        x: z.number().min(0),
+        y: z.number().min(0),
+        width: z.number().min(1),
+        height: z.number().min(1)
+      }).describe("Widget position and size"),
+      dataSource: z.object({
+        query: z.string().describe("Data query for widget"),
+        refreshInterval: z.number().min(0).default(300).describe("Refresh interval in seconds"),
+        parameters: z.record(z.string(), z.any()).optional().describe("Query parameters")
+      }).describe("Widget data source"),
+      visualization: z.object({
+        chartType: z.enum(["line", "bar", "pie", "area", "scatter", "table"]).optional(),
+        colors: z.array(z.string()).optional().describe("Custom color scheme"),
+        formatting: z.record(z.string(), z.any()).optional().describe("Visualization formatting")
+      }).optional().describe("Widget visualization settings")
+    })).optional().describe("Dashboard widgets")
+  }).optional().describe("Dashboard layout configuration"),
+  sharing: z.object({
+    shareWith: z.array(z.object({
+      type: z.enum(["user", "team", "group", "public"]),
+      identifier: z.string().describe("User/team/group identifier"),
+      permissions: z.enum(["view", "edit", "admin"]).default("view")
+    })).optional().describe("Sharing configuration"),
+    accessLink: z.boolean().default(false).describe("Generate public access link"),
+    embedCode: z.boolean().default(false).describe("Generate embed code")
+  }).optional().describe("Dashboard sharing settings"),
+  alerts: z.object({
+    enableAlerts: z.boolean().default(false).describe("Enable dashboard alerts"),
+    alertRules: z.array(z.object({
+      ruleName: z.string().describe("Alert rule name"),
+      condition: z.string().describe("Alert condition expression"),
+      threshold: z.number().describe("Alert threshold value"),
+      recipients: z.array(z.string().email()).describe("Alert recipients"),
+      frequency: z.enum(["immediate", "hourly", "daily", "weekly"]).default("immediate")
+    })).optional().describe("Alert rule definitions")
+  }).optional().describe("Dashboard alerting configuration"),
+  automation: z.object({
+    autoRefresh: z.boolean().default(true).describe("Enable automatic refresh"),
+    refreshInterval: z.number().min(60).default(300).describe("Global refresh interval in seconds"),
+    scheduleReports: z.boolean().default(false).describe("Enable scheduled report generation"),
+    reportSchedule: z.string().optional().describe("Cron expression for report schedule"),
+    exportFormats: z.array(z.enum(["pdf", "excel", "png"])).optional()
+      .describe("Formats for scheduled reports")
+  }).optional().describe("Dashboard automation settings")
+});
+
+// Response interfaces for analytics and reporting
+export interface FlakyTestResult {
+  testCaseId: number;
+  testCaseName: string;
+  flakinessScore: number;
+  totalExecutions: number;
+  failureCount: number;
+  successCount: number;
+  failureRate: number;
+  confidenceLevel: number;
+  environmentCorrelation?: {
+    environment: string;
+    flakinessInEnvironment: number;
+  }[];
+  recommendations: string[];
+  statisticalData: {
+    standardDeviation: number;
+    variance: number;
+    trendDirection: "increasing" | "decreasing" | "stable";
+  };
+}
+
+export interface QualityMetricsResult {
+  period: {
+    startDate: Date;
+    endDate: Date;
+  };
+  metrics: {
+    passRate: number;
+    testCoverage?: number;
+    defectDensity?: number;
+    automationRate: number;
+    testEfficiency?: number;
+    reliabilityIndex?: number;
+    maintainabilityScore?: number;
+  };
+  comparison?: {
+    previousPeriod: {
+      passRate: number;
+      automationRate: number;
+      [key: string]: number;
+    };
+    trends: {
+      passRateTrend: number;
+      automationTrend: number;
+      [key: string]: number;
+    };
+  };
+  recommendations: string[];
+  benchmarkData?: {
+    industryAverage: Record<string, number>;
+    topPerformers: Record<string, number>;
+  };
+}
+
+export interface PerformanceAnalysisResult {
+  period: {
+    startDate: Date;
+    endDate: Date;
+  };
+  performanceMetrics: {
+    averageExecutionTime: number;
+    medianExecutionTime: number;
+    throughput: number;
+    resourceUtilization?: {
+      cpu: number;
+      memory: number;
+      network?: number;
+    };
+  };
+  regressionAnalysis?: {
+    hasRegression: boolean;
+    regressionPoints: {
+      date: Date;
+      metric: string;
+      change: number;
+    }[];
+  };
+  bottlenecks: {
+    type: string;
+    description: string;
+    impact: "low" | "medium" | "high";
+    suggestions: string[];
+  }[];
+  optimizationSuggestions: string[];
+  trends: {
+    executionTimeTrend: number;
+    throughputTrend: number;
+  };
+}
+
+export interface RiskAssessmentResult {
+  assessmentDate: Date;
+  overallRiskScore: number;
+  riskLevel: "low" | "medium" | "high" | "critical";
+  riskFactors: {
+    factor: string;
+    score: number;
+    weight: number;
+    contribution: number;
+    description: string;
+  }[];
+  criticalAreas: {
+    area: string;
+    riskScore: number;
+    issues: string[];
+    recommendations: string[];
+  }[];
+  predictiveAnalysis?: {
+    failureProbability: number;
+    predictionHorizon: number;
+    confidenceInterval: {
+      lower: number;
+      upper: number;
+    };
+  };
+  mitigationStrategies: {
+    priority: "high" | "medium" | "low";
+    strategy: string;
+    estimatedImpact: number;
+    effort: "low" | "medium" | "high";
+  }[];
+}
+
+export interface TeamProductivityResult {
+  period: {
+    startDate: Date;
+    endDate: Date;
+  };
+  teamMetrics: {
+    testCreationRate: number;
+    executionEfficiency: number;
+    defectDetectionRate: number;
+    automationProgress: number;
+    velocity: number;
+  };
+  individualMetrics?: {
+    userId: string;
+    displayName?: string;
+    metrics: {
+      testCreationRate: number;
+      executionEfficiency: number;
+      automationContribution: number;
+    };
+  }[];
+  benchmarkComparison: {
+    teamVsProject: Record<string, number>;
+    teamVsOrganization?: Record<string, number>;
+  };
+  recommendations: string[];
+  capacityPlanning?: {
+    currentCapacity: number;
+    optimalCapacity: number;
+    bottlenecks: string[];
+    suggestions: string[];
+  };
+}
+
+export interface StandardReportResult {
+  reportId: string;
+  reportType: string;
+  generatedDate: Date;
+  scope: {
+    project: string;
+    plans?: number[];
+    suites?: number[];
+  };
+  outputFiles: {
+    format: string;
+    fileUrl: string;
+    fileSize: number;
+  }[];
+  summary: {
+    totalTests: number;
+    passRate: number;
+    executionTime: number;
+    keyFindings: string[];
+  };
+  distributionStatus?: {
+    emailsSent: number;
+    deliveryStatus: "pending" | "completed" | "failed";
+    errors?: string[];
+  };
+}
+
+export interface CustomReportResult {
+  reportId: string;
+  reportName: string;
+  generatedDate: Date;
+  template: string;
+  outputFiles: {
+    format: string;
+    fileUrl: string;
+    fileSize: number;
+  }[];
+  processingStats: {
+    processingTime: number;
+    dataPoints: number;
+    sectionsGenerated: number;
+  };
+  templateSaved?: boolean;
+}
+
+export interface ExportDataResult {
+  exportId: string;
+  exportDate: Date;
+  scope: {
+    project: string;
+    dataTypes: string[];
+    recordCount: number;
+  };
+  exportFiles: {
+    format: string;
+    fileUrl: string;
+    fileSize: number;
+    recordCount: number;
+  }[];
+  transformationSummary?: {
+    recordsProcessed: number;
+    recordsFiltered: number;
+    fieldsMapped: number;
+    anonymizedFields?: string[];
+  };
+  deliveryStatus?: {
+    method: string;
+    status: "pending" | "completed" | "failed";
+    deliveredAt?: Date;
+    errors?: string[];
+  };
+}
+
+export interface DashboardResult {
+  dashboardId: string;
+  operation: string;
+  status: "success" | "error" | "partial";
+  dashboard?: {
+    id: string;
+    name: string;
+    url: string;
+    widgets: number;
+    lastUpdated: Date;
+  };
+  sharing?: {
+    shareUrl?: string;
+    embedCode?: string;
+    sharedWith: {
+      type: string;
+      identifier: string;
+      permissions: string;
+    }[];
+  };
+  alerts?: {
+    alertsConfigured: number;
+    activeAlerts: number;
+  };
+  errors?: string[];
+  warnings?: string[];
+}

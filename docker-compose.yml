@@ -1,0 +1,13 @@
+version: '3.8'
+services:
+  azure-devops-mcp:
+    image: blstjohnson/azure-devops-mcp-http:1.3.0
+    build: .
+    environment:
+      - TRANSPORT=http-streaming
+      - MCP_PORT=${MCP_PORT:-3000}
+      - ADO_ORGANIZATION=${ADO_ORGANIZATION:-your-azure-devops-org}  # For cloud Azure DevOps
+      - ADO_SERVER_URL=https://tfs.ekassir.com/eKassirProjectCollection  # For on-premise Azure DevOps Server
+      # - ADO_MCP_AZURE_TOKEN_CREDENTIALS=${ADO_TOKEN}  # Uncomment if using static token
+    ports:
+      - "${MCP_PORT:-3000}:${MCP_PORT:-3000}"

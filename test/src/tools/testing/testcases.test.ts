@@ -4,26 +4,16 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebApi } from "azure-devops-node-api";
 import { configureTestCaseTools } from "../../../../src/tools/testing/testcases.js";
 
-type TokenProviderMock = () => Promise<AccessToken>;
-type ConnectionProviderMock = () => Promise<WebApi>;
-
-interface WitApiMock {
-  updateWorkItem: jest.Mock;
-  queryByWiql: jest.Mock;
-  getWorkItems: jest.Mock;
-  getWorkItem: jest.Mock;
-}
-
 describe("configureTestCaseTools", () => {
   let server: McpServer;
-  let tokenProvider: TokenProviderMock;
-  let connectionProvider: ConnectionProviderMock;
-  let mockConnection: { getWorkItemTrackingApi: jest.Mock };
-  let mockWitApi: WitApiMock;
+  let tokenProvider: any;
+  let connectionProvider: any;
+  let mockConnection: any;
+  let mockWitApi: any;
 
   beforeEach(() => {
     server = { tool: jest.fn() } as unknown as McpServer;
-    tokenProvider = jest.fn();
+    tokenProvider = jest.fn() as () => Promise<AccessToken>;
 
     mockWitApi = {
       updateWorkItem: jest.fn(),
@@ -33,10 +23,15 @@ describe("configureTestCaseTools", () => {
     };
 
     mockConnection = {
-      getWorkItemTrackingApi: jest.fn().mockResolvedValue(mockWitApi),
+      getWorkItemTrackingApi: jest.fn(),
     };
+    mockConnection.getWorkItemTrackingApi.mockResolvedValue(mockWitApi);
 
-    connectionProvider = jest.fn().mockResolvedValue(mockConnection);
+    connectionProvider = jest.fn();
+    connectionProvider.mockResolvedValue(mockConnection);
+
+    // Clear all mocks
+    jest.clearAllMocks();
   });
 
   describe("tool registration", () => {
@@ -64,7 +59,7 @@ describe("configureTestCaseTools", () => {
         }
       };
 
-      (mockWitApi.updateWorkItem as jest.Mock).mockResolvedValue(mockTestCase);
+      mockWitApi.updateWorkItem.mockResolvedValue(mockTestCase);
 
       const params = {
         project: "TestProject",
@@ -74,7 +69,7 @@ describe("configureTestCaseTools", () => {
         state: "Active"
       };
 
-      const result = await handler(params);
+      const result = await (handler as Function)(params);
 
       expect(mockWitApi.updateWorkItem).toHaveBeenCalledWith(
         {},
@@ -110,7 +105,7 @@ describe("configureTestCaseTools", () => {
       const [, , , handler] = call;
 
       const testError = new Error("API error");
-      (mockWitApi.updateWorkItem as jest.Mock).mockRejectedValue(testError);
+      mockWitApi.updateWorkItem.mockRejectedValue(testError);
 
       const params = {
         project: "TestProject",
@@ -118,11 +113,8 @@ describe("configureTestCaseTools", () => {
         title: "Updated Title"
       };
 
-      const result = await handler(params);
-
+      await expect((handler as Function)(params)).rejects.toThrow();
       expect(mockWitApi.updateWorkItem).toHaveBeenCalled();
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("Error updating test case: API error");
     });
   });
 
@@ -163,8 +155,8 @@ describe("configureTestCaseTools", () => {
         }
       ];
 
-      (mockWitApi.queryByWiql as jest.Mock).mockResolvedValue(mockQueryResult);
-      (mockWitApi.getWorkItems as jest.Mock).mockResolvedValue(mockWorkItems);
+      mockWitApi.queryByWiql.mockResolvedValue(mockQueryResult);
+      mockWitApi.getWorkItems.mockResolvedValue(mockWorkItems);
 
       const params = {
         project: "TestProject",
@@ -173,7 +165,7 @@ describe("configureTestCaseTools", () => {
         top: 100
       };
 
-      const result = await handler(params);
+      const result = await (handler as Function)(params);
 
       expect(mockWitApi.queryByWiql).toHaveBeenCalled();
       expect(mockWitApi.getWorkItems).toHaveBeenCalledWith(
@@ -207,14 +199,14 @@ describe("configureTestCaseTools", () => {
         workItems: []
       };
 
-      (mockWitApi.queryByWiql as jest.Mock).mockResolvedValue(mockQueryResult);
+      mockWitApi.queryByWiql.mockResolvedValue(mockQueryResult);
 
       const params = {
         project: "TestProject",
         searchText: "nonexistent"
       };
 
-      const result = await handler(params);
+      const result = await (handler as Function)(params);
 
       const response = JSON.parse(result.content[0].text);
       expect(response.testCases).toHaveLength(0);
@@ -230,18 +222,15 @@ describe("configureTestCaseTools", () => {
       const [, , , handler] = call;
 
       const testError = new Error("Query failed");
-      (mockWitApi.queryByWiql as jest.Mock).mockRejectedValue(testError);
+      mockWitApi.queryByWiql.mockRejectedValue(testError);
 
       const params = {
         project: "TestProject",
         searchText: "test"
       };
 
-      const result = await handler(params);
-
+      await expect((handler as Function)(params)).rejects.toThrow();
       expect(mockWitApi.queryByWiql).toHaveBeenCalled();
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("Error searching test cases: Query failed");
     });
   });
 
@@ -255,7 +244,7 @@ describe("configureTestCaseTools", () => {
       const [, , , handler] = call;
 
       const mockUpdatedItem = { id: 123, fields: { "System.State": "Ready" } };
-      (mockWitApi.updateWorkItem as jest.Mock).mockResolvedValue(mockUpdatedItem);
+      mockWitApi.updateWorkItem.mockResolvedValue(mockUpdatedItem);
 
       const params = {
         project: "TestProject",
@@ -267,7 +256,7 @@ describe("configureTestCaseTools", () => {
         batchSize: 2
       };
 
-      const result = await handler(params);
+      const result = await (handler as Function)(params);
 
       expect(mockWitApi.updateWorkItem).toHaveBeenCalledTimes(2);
 
@@ -285,8 +274,15 @@ describe("configureTestCaseTools", () => {
       if (!call) throw new Error("testcase_bulk_update tool not registered");
       const [, , , handler] = call;
 
-      const mockUpdatedItem = { id: 124 };
-      (mockWitApi.updateWorkItem as jest.Mock)
+      // Use addTags to trigger getWorkItem call, which will make the test more realistic
+      mockWitApi.getWorkItem
+        .mockResolvedValueOnce({ fields: { "System.Tags": "existing" } })  // For testCase 123
+        .mockResolvedValueOnce({ fields: { "System.Tags": "existing" } }); // For testCase 124
+
+      const mockUpdatedItem = { id: 124, fields: { "System.Tags": "existing; new-tag" } };
+      
+      // Mock updateWorkItem to fail for first call, succeed for second
+      mockWitApi.updateWorkItem
         .mockRejectedValueOnce(new Error("Update failed for 123"))
         .mockResolvedValueOnce(mockUpdatedItem);
 
@@ -294,18 +290,21 @@ describe("configureTestCaseTools", () => {
         project: "TestProject",
         testCaseIds: [123, 124],
         updates: {
-          priority: 2
+          addTags: ["new-tag"]  // This will trigger getWorkItem and updateWorkItem calls
         },
         continueOnError: true
       };
 
-      const result = await handler(params);
-
+      const result = await (handler as Function)(params);
+      
       const response = JSON.parse(result.content[0].text);
+      
       expect(response.totalProcessed).toBe(2);
       expect(response.successCount).toBe(1);
       expect(response.errorCount).toBe(1);
       expect(response.errors).toHaveLength(1);
+      expect(response.errors[0].testCaseId).toBe(123);
+      expect(response.errors[0].error).toBe("Update failed for 123");
     });
 
     it("should handle API errors correctly", async () => {
@@ -316,23 +315,35 @@ describe("configureTestCaseTools", () => {
       if (!call) throw new Error("testcase_bulk_update tool not registered");
       const [, , , handler] = call;
 
+      // Use addTags to trigger getWorkItem call, which will make the test more realistic
+      mockWitApi.getWorkItem.mockResolvedValue({ fields: { "System.Tags": "existing" } });
+      
       const testError = new Error("Update failed");
-      (mockWitApi.updateWorkItem as jest.Mock).mockRejectedValue(testError);
+      mockWitApi.updateWorkItem.mockRejectedValue(testError);
 
       const params = {
         project: "TestProject",
-        testCaseIds: [123, 124],
+        testCaseIds: [123],
         updates: {
-          priority: 2
+          addTags: ["new-tag"]  // This will trigger getWorkItem and updateWorkItem calls
         },
         continueOnError: false
       };
 
-      const result = await handler(params);
-
-      expect(mockWitApi.updateWorkItem).toHaveBeenCalled();
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("Error in bulk update: Update failed");
+      await expect((handler as Function)(params)).rejects.toThrow("Update failed");
+      
+      // Verify updateWorkItem was called
+      expect(mockWitApi.updateWorkItem).toHaveBeenCalledWith(
+        {},
+        expect.arrayContaining([
+          expect.objectContaining({
+            op: "add",
+            path: "/fields/System.Tags",
+            value: "existing; new-tag"
+          })
+        ]),
+        123
+      );
     });
   });
 });

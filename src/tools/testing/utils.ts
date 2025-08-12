@@ -329,7 +329,7 @@ export function createSafeFieldName(baseName: string, prefix = "Custom"): string
   // Remove invalid characters and ensure proper format
   const safeName = baseName
     .replace(/[^A-Za-z0-9_.]/g, "")
-    .replace(/^[^A-Za-z]/, "")
+    .replace(/^[^A-Za-z]+/, "")
     .substring(0, 128); // Azure DevOps field name limit
 
   return `${prefix}.${safeName}`;

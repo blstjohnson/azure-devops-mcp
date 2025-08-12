@@ -6,16 +6,16 @@ import { configureTestSuiteTools } from "../../../../src/tools/testing/testsuite
 
 describe("configureTestSuiteTools", () => {
   let server: McpServer;
-  let tokenProvider: () => Promise<AccessToken>;
-  let connectionProvider: () => Promise<WebApi>;
-  let mockConnection: { getTestPlanApi: jest.Mock; getWorkItemTrackingApi: jest.Mock; getTestApi: jest.Mock };
+  let tokenProvider: any;
+  let connectionProvider: any;
+  let mockConnection: any;
   let mockTestPlanApi: any;
   let mockWitApi: any;
   let mockTestApi: any;
 
   beforeEach(() => {
     server = { tool: jest.fn() } as unknown as McpServer;
-    tokenProvider = jest.fn();
+    tokenProvider = jest.fn() as () => Promise<AccessToken>;
 
     mockTestPlanApi = {
       createTestSuite: jest.fn(),
@@ -35,12 +35,16 @@ describe("configureTestSuiteTools", () => {
     };
 
     mockConnection = {
-      getTestPlanApi: jest.fn().mockResolvedValue(mockTestPlanApi),
-      getWorkItemTrackingApi: jest.fn().mockResolvedValue(mockWitApi),
-      getTestApi: jest.fn().mockResolvedValue(mockTestApi),
+      getTestPlanApi: jest.fn(),
+      getWorkItemTrackingApi: jest.fn(),
+      getTestApi: jest.fn(),
     };
+    mockConnection.getTestPlanApi.mockResolvedValue(mockTestPlanApi);
+    mockConnection.getWorkItemTrackingApi.mockResolvedValue(mockWitApi);
+    mockConnection.getTestApi.mockResolvedValue(mockTestApi);
 
-    connectionProvider = jest.fn().mockResolvedValue(mockConnection);
+    connectionProvider = jest.fn();
+    connectionProvider.mockResolvedValue(mockConnection);
   });
 
   describe("tool registration", () => {
@@ -66,7 +70,7 @@ describe("configureTestSuiteTools", () => {
         plan: { id: 1, name: "Test Plan" }
       };
 
-      (mockTestPlanApi.createTestSuite as jest.Mock).mockResolvedValue(mockSuite);
+      mockTestPlanApi.createTestSuite.mockResolvedValue(mockSuite);
 
       const params = {
         project: "TestProject",
@@ -75,7 +79,7 @@ describe("configureTestSuiteTools", () => {
         suiteType: "StaticTestSuite"
       };
 
-      const result = await handler(params);
+      const result = await (handler as Function)(params);
 
       expect(mockTestPlanApi.createTestSuite).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -98,7 +102,7 @@ describe("configureTestSuiteTools", () => {
       const [, , , handler] = call;
 
       const testError = new Error("API connection failed");
-      (mockTestPlanApi.createTestSuite as jest.Mock).mockRejectedValue(testError);
+      mockTestPlanApi.createTestSuite.mockRejectedValue(testError);
 
       const params = {
         project: "TestProject",
@@ -106,7 +110,7 @@ describe("configureTestSuiteTools", () => {
         name: "Test Suite"
       };
 
-      await expect(handler(params)).rejects.toThrow();
+      await expect((handler as Function)(params)).rejects.toThrow();
       expect(mockTestPlanApi.createTestSuite).toHaveBeenCalled();
     });
   });
@@ -131,8 +135,8 @@ describe("configureTestSuiteTools", () => {
         name: "New Name"
       };
 
-      (mockTestPlanApi.getTestSuiteById as jest.Mock).mockResolvedValue(currentSuite);
-      (mockTestPlanApi.updateTestSuite as jest.Mock).mockResolvedValue(updatedSuite);
+      mockTestPlanApi.getTestSuiteById.mockResolvedValue(currentSuite);
+      mockTestPlanApi.updateTestSuite.mockResolvedValue(updatedSuite);
 
       const params = {
         project: "TestProject",
@@ -141,7 +145,7 @@ describe("configureTestSuiteTools", () => {
         name: "New Name"
       };
 
-      const result = await handler(params);
+      const result = await (handler as Function)(params);
 
       expect(mockTestPlanApi.getTestSuiteById).toHaveBeenCalledWith("TestProject", 1, 123);
       expect(mockTestPlanApi.updateTestSuite).toHaveBeenCalled();
@@ -156,7 +160,7 @@ describe("configureTestSuiteTools", () => {
       if (!call) throw new Error("testsuite_update_suite tool not registered");
       const [, , , handler] = call;
 
-      (mockTestPlanApi.getTestSuiteById as jest.Mock).mockResolvedValue(null);
+      mockTestPlanApi.getTestSuiteById.mockResolvedValue(null);
 
       const params = {
         project: "TestProject",
@@ -164,7 +168,7 @@ describe("configureTestSuiteTools", () => {
         suiteId: 999
       };
 
-      await expect(handler(params)).rejects.toThrow();
+      await expect((handler as Function)(params)).rejects.toThrow();
     });
   });
 
@@ -182,8 +186,8 @@ describe("configureTestSuiteTools", () => {
         name: "Test Suite"
       };
 
-      (mockTestPlanApi.getTestSuiteById as jest.Mock).mockResolvedValue(mockSuite);
-      (mockTestPlanApi.deleteTestSuite as jest.Mock).mockResolvedValue({});
+      mockTestPlanApi.getTestSuiteById.mockResolvedValue(mockSuite);
+      mockTestPlanApi.deleteTestSuite.mockResolvedValue({});
 
       const params = {
         project: "TestProject",
@@ -191,7 +195,7 @@ describe("configureTestSuiteTools", () => {
         suiteId: 123
       };
 
-      const result = await handler(params);
+      const result = await (handler as Function)(params);
 
       expect(mockTestPlanApi.deleteTestSuite).toHaveBeenCalledWith("TestProject", 1, 123);
 
@@ -208,7 +212,7 @@ describe("configureTestSuiteTools", () => {
       if (!call) throw new Error("testsuite_delete_suite tool not registered");
       const [, , , handler] = call;
 
-      (mockTestPlanApi.getTestSuiteById as jest.Mock).mockResolvedValue(null);
+      mockTestPlanApi.getTestSuiteById.mockResolvedValue(null);
 
       const params = {
         project: "TestProject",
@@ -216,7 +220,7 @@ describe("configureTestSuiteTools", () => {
         suiteId: 999
       };
 
-      await expect(handler(params)).rejects.toThrow();
+      await expect((handler as Function)(params)).rejects.toThrow();
     });
   });
 
@@ -234,14 +238,14 @@ describe("configureTestSuiteTools", () => {
         { id: 124, name: "Suite 2", suiteType: "DynamicTestSuite" }
       ];
 
-      (mockTestPlanApi.getTestSuitesForPlan as jest.Mock).mockResolvedValue(mockSuites);
+      mockTestPlanApi.getTestSuitesForPlan.mockResolvedValue(mockSuites);
 
       const params = {
         project: "TestProject",
         planId: 1
       };
 
-      const result = await handler(params);
+      const result = await (handler as Function)(params);
 
       expect(mockTestPlanApi.getTestSuitesForPlan).toHaveBeenCalledWith("TestProject", 1);
 
@@ -261,7 +265,7 @@ describe("configureTestSuiteTools", () => {
         project: "TestProject"
       };
 
-      await expect(handler(params)).rejects.toThrow();
+      await expect((handler as Function)(params)).rejects.toThrow();
     });
   });
 
@@ -280,7 +284,7 @@ describe("configureTestSuiteTools", () => {
         suiteType: "StaticTestSuite"
       };
 
-      (mockTestPlanApi.getTestSuiteById as jest.Mock).mockResolvedValue(mockSuite);
+      mockTestPlanApi.getTestSuiteById.mockResolvedValue(mockSuite);
 
       const params = {
         project: "TestProject",
@@ -288,7 +292,7 @@ describe("configureTestSuiteTools", () => {
         suiteId: 123
       };
 
-      const result = await handler(params);
+      const result = await (handler as Function)(params);
 
       expect(mockTestPlanApi.getTestSuiteById).toHaveBeenCalledWith("TestProject", 1, 123);
       expect(result.content[0].text).toBe(JSON.stringify(mockSuite, null, 2));
@@ -302,7 +306,7 @@ describe("configureTestSuiteTools", () => {
       if (!call) throw new Error("testsuite_get_suite_details tool not registered");
       const [, , , handler] = call;
 
-      (mockTestPlanApi.getTestSuiteById as jest.Mock).mockResolvedValue(null);
+      mockTestPlanApi.getTestSuiteById.mockResolvedValue(null);
 
       const params = {
         project: "TestProject",
@@ -310,7 +314,7 @@ describe("configureTestSuiteTools", () => {
         suiteId: 999
       };
 
-      await expect(handler(params)).rejects.toThrow();
+      await expect((handler as Function)(params)).rejects.toThrow();
     });
   });
 });

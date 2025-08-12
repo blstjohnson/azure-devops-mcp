@@ -382,7 +382,7 @@ describe("Testing Schemas", () => {
           newName: "Cloned Suite",
           cloneTestCases: false,
           preserveLinks: true,
-          configurationMapping: { 1: 2, 3: 4 }
+          configurationMapping: { "1": 2, "3": 4 }
         };
         const result = cloneTestSuiteSchema.parse(input);
         expect(result.newName).toBe("Cloned Suite");

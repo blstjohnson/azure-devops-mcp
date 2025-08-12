@@ -154,7 +154,7 @@ export const listTestSuitesSchema = z.intersection(
     includeChildCount: z.boolean().default(true)
       .describe("Include child suite count")
   }),
-  z.intersection(filteringSchema, paginationSchema)
+  z.intersection(filteringSchema.omit({ state: true }), paginationSchema)
 );
 
 export const cloneTestSuiteSchema = z.object({
@@ -176,7 +176,7 @@ export const cloneTestSuiteSchema = z.object({
     .describe("Whether to clone configurations"),
   
   // Mapping options
-  configurationMapping: z.record(z.number(), z.number()).optional()
+  configurationMapping: z.record(z.string(), z.number()).optional()
     .describe("Mapping of source to target configuration IDs"),
   areaPathMapping: pathValidation.optional()
     .describe("Target area path for cloned suite"),
@@ -447,4 +447,700 @@ export interface TestingError extends Error {
   code: ErrorCodes;
   details?: any;
   suggestions?: string[];
+}
+
+// Test Configuration Schemas
+export const environmentTypeEnum = z.enum(["Development", "Test", "Staging", "Production", "Integration", "QA"]);
+export const variableTypeEnum = z.enum(["string", "number", "boolean", "json", "password", "url"]);
+export const configurationStateEnum = z.enum(["Active", "Inactive", "Draft", "Archived"]);
+
+export const configurationVariableSchema = z.object({
+  name: z.string()
+    .min(1, "Variable name cannot be empty")
+    .max(128, "Variable name too long")
+    .regex(/^[a-zA-Z][a-zA-Z0-9_]*$/, "Variable name must start with letter and contain only letters, numbers, and underscores"),
+  value: z.string().describe("Variable value (encrypted for secrets)"),
+  type: variableTypeEnum.default("string").describe("Variable data type"),
+  isSecret: z.boolean().default(false).describe("Whether this is a secret variable"),
+  description: z.string().max(500).optional().describe("Variable description"),
+  defaultValue: z.string().optional().describe("Default value if not specified"),
+  validation: z.object({
+    required: z.boolean().default(false),
+    pattern: z.string().optional().describe("Regex pattern for validation"),
+    minLength: z.number().optional(),
+    maxLength: z.number().optional(),
+    allowedValues: z.array(z.string()).optional().describe("List of allowed values")
+  }).optional().describe("Validation rules for the variable")
+});
+
+export const configurationSettingsSchema = z.object({
+  timeout: z.number().min(1).max(3600).default(300).describe("Default timeout in seconds"),
+  retryAttempts: z.number().min(0).max(10).default(3).describe("Default retry attempts"),
+  parallelExecution: z.boolean().default(false).describe("Allow parallel test execution"),
+  captureScreenshots: z.boolean().default(true).describe("Capture screenshots on failure"),
+  generateReports: z.boolean().default(true).describe("Generate test reports"),
+  cleanupAfterRun: z.boolean().default(true).describe("Cleanup test data after run"),
+  
+  // Browser/Environment settings
+  browserSettings: z.object({
+    browser: z.enum(["chrome", "firefox", "edge", "safari"]).default("chrome"),
+    headless: z.boolean().default(true),
+    windowSize: z.string().default("1920x1080")
+  }).optional(),
+  
+  // Database settings
+  databaseSettings: z.object({
+    connectionString: z.string().optional(),
+    schema: z.string().optional(),
+    isolationLevel: z.enum(["ReadCommitted", "ReadUncommitted", "RepeatableRead", "Serializable"]).optional()
+  }).optional(),
+  
+  // API settings
+  apiSettings: z.object({
+    baseUrl: z.string().url().optional(),
+    defaultHeaders: z.record(z.string(), z.string()).optional(),
+    authentication: z.object({
+      type: z.enum(["none", "basic", "bearer", "apikey", "oauth2"]).default("none"),
+      credentials: z.record(z.string(), z.string()).optional()
+    }).optional()
+  }).optional(),
+  
+  // Custom settings
+  customSettings: z.record(z.string(), z.any()).optional().describe("Custom configuration settings")
+});
+
+export const createTestConfigurationSchema = z.object({
+  project: projectValidation.describe("Project ID or name"),
+  name: nameValidation.describe("Configuration name"),
+  description: z.string().max(2000).optional().describe("Configuration description"),
+  environment: environmentTypeEnum.describe("Target environment type"),
+  
+  // Variable definitions
+  variables: z.array(configurationVariableSchema).optional().describe("Configuration variables"),
+  
+  // Settings
+  settings: configurationSettingsSchema.optional().describe("Configuration settings"),
+  
+  // Inheritance and templates
+  parentConfigurationId: idValidation.optional().describe("Parent configuration to inherit from"),
+  templateId: idValidation.optional().describe("Configuration template to use"),
+  
+  // Organization and tagging
+  tags: z.array(tagValidation).optional().describe("Configuration tags"),
+  category: z.string().max(100).optional().describe("Configuration category"),
+  
+  // Validation rules
+  validationRules: z.object({
+    validateConnectivity: z.boolean().default(true).describe("Validate network connectivity"),
+    validateDependencies: z.boolean().default(true).describe("Validate required dependencies"),
+    validatePermissions: z.boolean().default(false).describe("Validate required permissions"),
+    customValidators: z.array(z.string()).optional().describe("Custom validation scripts")
+  }).optional(),
+  
+  // Access control
+  accessControl: z.object({
+    isPublic: z.boolean().default(false).describe("Whether configuration is publicly accessible"),
+    allowedProjects: z.array(projectValidation).optional().describe("Projects allowed to use this configuration"),
+    allowedTeams: z.array(z.string()).optional().describe("Teams allowed to use this configuration")
+  }).optional()
+});
+
+export const updateTestConfigurationSchema = z.object({
+  project: projectValidation.describe("Project ID or name"),
+  configurationId: idValidation.describe("Configuration ID to update"),
+  name: nameValidation.optional().describe("Updated configuration name"),
+  description: z.string().max(2000).optional().describe("Updated description"),
+  environment: environmentTypeEnum.optional().describe("Updated environment type"),
+  
+  // Variable updates
+  variables: z.array(configurationVariableSchema).optional().describe("Updated variables (replaces all)"),
+  addVariables: z.array(configurationVariableSchema).optional().describe("Variables to add"),
+  removeVariables: z.array(z.string()).optional().describe("Variable names to remove"),
+  updateVariables: z.array(z.object({
+    name: z.string().describe("Variable name to update"),
+    updates: configurationVariableSchema.partial().describe("Variable updates")
+  })).optional().describe("Specific variable updates"),
+  
+  // Settings updates
+  settings: configurationSettingsSchema.optional().describe("Updated settings (replaces all)"),
+  updateSettings: configurationSettingsSchema.partial().optional().describe("Partial settings updates"),
+  
+  // Tag updates
+  tags: z.array(tagValidation).optional().describe("Updated tags (replaces all)"),
+  addTags: z.array(tagValidation).optional().describe("Tags to add"),
+  removeTags: z.array(tagValidation).optional().describe("Tags to remove"),
+  
+  // State management
+  state: configurationStateEnum.optional().describe("Configuration state"),
+  
+  // Access control updates
+  accessControl: z.object({
+    isPublic: z.boolean().optional(),
+    allowedProjects: z.array(projectValidation).optional(),
+    allowedTeams: z.array(z.string()).optional()
+  }).optional().describe("Updated access control settings")
+});
+
+export const listTestConfigurationsSchema = z.intersection(
+  z.object({
+    project: projectValidation.optional().describe("Project ID or name to filter by"),
+    environment: z.array(environmentTypeEnum).optional().describe("Filter by environment types"),
+    state: z.array(configurationStateEnum).optional().describe("Filter by configuration states"),
+    category: z.string().optional().describe("Filter by category"),
+    
+    // Search and filtering
+    nameFilter: z.string().optional().describe("Filter by name (partial match)"),
+    tags: z.array(tagValidation).optional().describe("Filter by tags"),
+    
+    // Access filtering
+    accessibleOnly: z.boolean().default(true).describe("Only show configurations accessible to current user"),
+    includeInherited: z.boolean().default(true).describe("Include inherited configurations"),
+    
+    // Output options
+    includeVariables: z.boolean().default(false).describe("Include variable definitions"),
+    includeSettings: z.boolean().default(false).describe("Include configuration settings"),
+    includeUsageStats: z.boolean().default(false).describe("Include usage statistics"),
+    
+    // Sorting
+    sortBy: z.enum(["name", "environment", "createdDate", "modifiedDate", "usage"])
+      .default("name").describe("Sort field"),
+    sortOrder: z.enum(["asc", "desc"]).default("asc").describe("Sort order")
+  }),
+  paginationSchema
+);
+
+export const deleteTestConfigurationSchema = z.object({
+  project: projectValidation.describe("Project ID or name"),
+  configurationId: idValidation.describe("Configuration ID to delete"),
+  forceDelete: z.boolean().default(false).describe("Force deletion even if in use"),
+  createBackup: z.boolean().default(true).describe("Create backup before deletion"),
+  checkDependencies: z.boolean().default(true).describe("Check for dependencies before deletion")
+});
+
+export const cloneTestConfigurationSchema = z.object({
+  sourceProject: projectValidation.describe("Source project ID or name"),
+  sourceConfigurationId: idValidation.describe("Source configuration ID"),
+  
+  targetProject: projectValidation.describe("Target project ID or name"),
+  newName: nameValidation.describe("Name for cloned configuration"),
+  newDescription: z.string().max(2000).optional().describe("Description for cloned configuration"),
+  
+  // Clone options
+  cloneVariables: z.boolean().default(true).describe("Clone variable definitions"),
+  cloneSettings: z.boolean().default(true).describe("Clone configuration settings"),
+  cloneTags: z.boolean().default(true).describe("Clone tags"),
+  cloneAccessControl: z.boolean().default(false).describe("Clone access control settings"),
+  
+  // Environment mapping
+  targetEnvironment: environmentTypeEnum.optional().describe("Target environment type"),
+  
+  // Variable transformations
+  variableTransformations: z.array(z.object({
+    sourceVariableName: z.string().describe("Source variable name"),
+    targetVariableName: z.string().describe("Target variable name"),
+    newValue: z.string().optional().describe("New value for target variable")
+  })).optional().describe("Variable name/value transformations"),
+  
+  // Cross-project considerations
+  updateReferences: z.boolean().default(true).describe("Update project-specific references"),
+  preserveSecrets: z.boolean().default(false).describe("Preserve secret variables (requires permissions)")
+});
+
+export const validateTestConfigurationSchema = z.object({
+  project: projectValidation.describe("Project ID or name"),
+  configurationId: idValidation.optional().describe("Configuration ID to validate (omit to validate definition)"),
+  
+  // Inline configuration for validation
+  configurationDefinition: createTestConfigurationSchema.optional()
+    .describe("Configuration definition to validate"),
+  
+  // Validation options
+  validationTypes: z.array(z.enum([
+    "schema", "connectivity", "dependencies", "permissions", "variables", "settings", "compatibility"
+  ])).default(["schema", "connectivity", "dependencies"])
+    .describe("Types of validation to perform"),
+  
+  // Environment-specific validation
+  targetEnvironments: z.array(environmentTypeEnum).optional()
+    .describe("Validate against specific environments"),
+  
+  // Validation settings
+  strictValidation: z.boolean().default(false).describe("Use strict validation rules"),
+  includeWarnings: z.boolean().default(true).describe("Include warnings in validation results"),
+  validateReferences: z.boolean().default(true).describe("Validate referenced resources")
+});
+
+// Advanced Test Execution Schemas
+export const scheduleTestRunSchema = z.object({
+  project: projectValidation.describe("Project ID or name"),
+  planId: idValidation.describe("Test plan ID"),
+  
+  // Schedule definition
+  scheduleName: z.string().min(1).max(256).describe("Name for the scheduled run"),
+  cronExpression: z.string().describe("Cron expression for scheduling (e.g., '0 2 * * 1-5')"),
+  timezone: z.string().default("UTC").describe("Timezone for schedule execution"),
+  
+  // Run configuration
+  runConfiguration: z.object({
+    suiteIds: z.array(idValidation).optional().describe("Test suite IDs to run"),
+    testCaseIds: z.array(idValidation).optional().describe("Specific test case IDs"),
+    configurationId: idValidation.optional().describe("Test configuration to use"),
+    buildDefinitionId: idValidation.optional().describe("Build definition to trigger before run"),
+    
+    // Execution settings
+    parallel: z.boolean().default(false).describe("Run tests in parallel"),
+    maxParallelism: z.number().min(1).max(20).default(5).describe("Maximum parallel executions"),
+    timeoutMinutes: z.number().min(1).max(1440).default(60).describe("Timeout in minutes"),
+    
+    // Retry settings
+    retryPolicy: z.object({
+      maxRetries: z.number().min(0).max(5).default(2),
+      retryOnFailure: z.boolean().default(true),
+      retryDelay: z.number().min(0).max(300).default(30).describe("Delay between retries in seconds")
+    }).optional(),
+    
+    // Trigger conditions
+    triggerConditions: z.object({
+      onBuildCompletion: z.boolean().default(false),
+      onlyIfBuildSuccessful: z.boolean().default(true),
+      minimumChanges: z.number().default(0).describe("Minimum code changes to trigger"),
+      skipIfNoChanges: z.boolean().default(false)
+    }).optional()
+  }),
+  
+  // Schedule settings
+  startDate: z.coerce.date().optional().describe("Schedule start date"),
+  endDate: z.coerce.date().optional().describe("Schedule end date"),
+  enabled: z.boolean().default(true).describe("Whether schedule is enabled"),
+  
+  // Notification settings
+  notifications: z.object({
+    onSuccess: z.array(z.string().email()).optional().describe("Email addresses for success notifications"),
+    onFailure: z.array(z.string().email()).optional().describe("Email addresses for failure notifications"),
+    onTimeout: z.array(z.string().email()).optional().describe("Email addresses for timeout notifications"),
+    includeReport: z.boolean().default(true).describe("Include test report in notifications")
+  }).optional()
+});
+
+export const batchTestRunsSchema = z.object({
+  project: projectValidation.describe("Project ID or name"),
+  batchName: z.string().min(1).max(256).describe("Name for the batch execution"),
+  
+  // Execution runs
+  runs: z.array(z.object({
+    runName: z.string().describe("Name for this run"),
+    planId: idValidation.describe("Test plan ID"),
+    suiteIds: z.array(idValidation).optional().describe("Test suite IDs"),
+    testCaseIds: z.array(idValidation).optional().describe("Specific test case IDs"),
+    configurationId: idValidation.optional().describe("Test configuration to use"),
+    priority: z.number().min(1).max(10).default(5).describe("Execution priority (1=highest)"),
+    dependsOn: z.array(z.string()).optional().describe("Names of runs this depends on")
+  })).min(1).describe("Test runs to execute"),
+  
+  // Batch execution settings
+  executionMode: z.enum(["sequential", "parallel", "prioritized"]).default("sequential")
+    .describe("How to execute the batch"),
+  maxConcurrentRuns: z.number().min(1).max(10).default(3).describe("Maximum concurrent runs"),
+  continueOnFailure: z.boolean().default(true).describe("Continue batch if individual run fails"),
+  
+  // Resource allocation
+  resourceAllocation: z.object({
+    cpuLimit: z.number().min(0.1).max(4.0).optional().describe("CPU limit per run"),
+    memoryLimit: z.number().min(256).max(8192).optional().describe("Memory limit in MB"),
+    diskSpace: z.number().min(1).max(100).optional().describe("Disk space in GB"),
+    networkBandwidth: z.number().optional().describe("Network bandwidth limit in Mbps")
+  }).optional(),
+  
+  // Timeout and retry settings
+  globalTimeout: z.number().min(1).max(1440).default(120).describe("Global timeout in minutes"),
+  defaultRetryPolicy: z.object({
+    maxRetries: z.number().min(0).max(5).default(1),
+    retryDelay: z.number().min(0).max(300).default(60)
+  }).optional()
+});
+
+export const executionHistorySchema = z.intersection(
+  z.object({
+    project: projectValidation.describe("Project ID or name"),
+    planIds: z.array(idValidation).optional().describe("Filter by test plan IDs"),
+    suiteIds: z.array(idValidation).optional().describe("Filter by test suite IDs"),
+    
+    // Time range filtering
+    startDate: z.coerce.date().optional().describe("Execution start date filter"),
+    endDate: z.coerce.date().optional().describe("Execution end date filter"),
+    lastDays: z.number().min(1).max(365).optional().describe("Last N days of executions"),
+    
+    // Status filtering
+    outcomes: z.array(z.enum(["Passed", "Failed", "Blocked", "NotExecuted", "Warning", "Error"]))
+      .optional().describe("Filter by test outcomes"),
+    runStates: z.array(z.enum(["NotStarted", "InProgress", "Completed", "Aborted", "Timeout"]))
+      .optional().describe("Filter by run states"),
+    
+    // Analysis options
+    includeMetrics: z.boolean().default(true).describe("Include performance metrics"),
+    includeTrends: z.boolean().default(true).describe("Include trend analysis"),
+    includeEnvironmentCorrelation: z.boolean().default(false)
+      .describe("Include environment correlation data"),
+    
+    // Aggregation settings
+    groupBy: z.enum(["day", "week", "month", "suite", "configuration", "environment"])
+      .default("day").describe("Group results by time period or category"),
+    includeFlakiness: z.boolean().default(false).describe("Include flakiness analysis"),
+    
+    // Output format
+    includeDetailedResults: z.boolean().default(false).describe("Include detailed test results"),
+    includeAttachments: z.boolean().default(false).describe("Include attachment information")
+  }),
+  paginationSchema
+);
+
+export const testDataManagementSchema = z.object({
+  project: projectValidation.describe("Project ID or name"),
+  operation: z.enum(["generate", "cleanup", "mask", "version", "restore", "backup"])
+    .describe("Data management operation"),
+  
+  // Target specification
+  scope: z.object({
+    planIds: z.array(idValidation).optional().describe("Test plan scope"),
+    suiteIds: z.array(idValidation).optional().describe("Test suite scope"),
+    testCaseIds: z.array(idValidation).optional().describe("Specific test cases"),
+    dataCategories: z.array(z.string()).optional().describe("Data categories to target")
+  }),
+  
+  // Operation-specific settings
+  generateSettings: z.object({
+    dataType: z.enum(["synthetic", "anonymized", "template-based"]).default("synthetic"),
+    recordCount: z.number().min(1).max(100000).default(1000),
+    seedValue: z.number().optional().describe("Seed for reproducible generation"),
+    dataSchema: z.record(z.string(), z.any()).optional().describe("Data schema definition"),
+    relationships: z.array(z.object({
+      parentTable: z.string(),
+      childTable: z.string(),
+      relationship: z.enum(["one-to-one", "one-to-many", "many-to-many"])
+    })).optional()
+  }).optional(),
+  
+  cleanupSettings: z.object({
+    retentionDays: z.number().min(0).max(365).default(30),
+    cleanupStrategy: z.enum(["soft-delete", "hard-delete", "archive"]).default("soft-delete"),
+    preserveReferences: z.boolean().default(true),
+    cleanupCategories: z.array(z.string()).optional()
+  }).optional(),
+  
+  maskingSettings: z.object({
+    maskingRules: z.array(z.object({
+      fieldPattern: z.string().describe("Field name pattern to mask"),
+      maskingType: z.enum(["hash", "random", "static", "format-preserving"]),
+      maskingValue: z.string().optional().describe("Static value for static masking")
+    })),
+    preserveFormat: z.boolean().default(true),
+    consistentMasking: z.boolean().default(true).describe("Same input produces same masked output")
+  }).optional(),
+  
+  versioningSettings: z.object({
+    versionName: z.string().describe("Version name or tag"),
+    description: z.string().optional().describe("Version description"),
+    includeSchema: z.boolean().default(true),
+    compression: z.boolean().default(true)
+  }).optional(),
+  
+  // Execution settings
+  executionMode: z.enum(["immediate", "scheduled", "on-demand"]).default("immediate"),
+  scheduleExpression: z.string().optional().describe("Cron expression for scheduled operations"),
+  notifications: z.object({
+    onCompletion: z.array(z.string().email()).optional(),
+    onError: z.array(z.string().email()).optional()
+  }).optional()
+});
+
+// Updated Configuration Interface
+export interface TestConfigurationDetailed {
+  id: number;
+  name: string;
+  description?: string;
+  environment: string;
+  state: "Active" | "Inactive" | "Draft" | "Archived";
+  
+  // Configuration content
+  variables: ConfigurationVariable[];
+  settings: ConfigurationSettings;
+  
+  // Organization
+  category?: string;
+  tags?: string[];
+  
+  // Inheritance
+  parentConfiguration?: { id: number; name: string };
+  childConfigurations?: { id: number; name: string }[];
+  
+  // Access control
+  isPublic: boolean;
+  allowedProjects?: string[];
+  allowedTeams?: string[];
+  
+  // Usage tracking
+  usageCount?: number;
+  lastUsed?: Date;
+  
+  // Validation status
+  validationStatus?: {
+    isValid: boolean;
+    lastValidated: Date;
+    errors?: string[];
+    warnings?: string[];
+  };
+  
+  // Audit information
+  createdBy: IdentityRef;
+  createdDate: Date;
+  lastModifiedBy: IdentityRef;
+  lastModifiedDate: Date;
+  version: number;
+}
+
+export interface ConfigurationVariable {
+  name: string;
+  value: string;
+  type: "string" | "number" | "boolean" | "json" | "password" | "url";
+  isSecret: boolean;
+  description?: string;
+  defaultValue?: string;
+  validation?: {
+    required: boolean;
+    pattern?: string;
+    minLength?: number;
+    maxLength?: number;
+    allowedValues?: string[];
+  };
+}
+
+export interface ConfigurationSettings {
+  timeout: number;
+  retryAttempts: number;
+  parallelExecution: boolean;
+  captureScreenshots: boolean;
+  generateReports: boolean;
+  cleanupAfterRun: boolean;
+  
+  browserSettings?: {
+    browser: "chrome" | "firefox" | "edge" | "safari";
+    headless: boolean;
+    windowSize: string;
+  };
+  
+  databaseSettings?: {
+    connectionString?: string;
+    schema?: string;
+    isolationLevel?: "ReadCommitted" | "ReadUncommitted" | "RepeatableRead" | "Serializable";
+  };
+  
+  apiSettings?: {
+    baseUrl?: string;
+    defaultHeaders?: Record<string, string>;
+    authentication?: {
+      type: "none" | "basic" | "bearer" | "apikey" | "oauth2";
+      credentials?: Record<string, string>;
+    };
+  };
+  
+  customSettings?: Record<string, any>;
+}
+
+// Advanced Execution Interfaces
+export interface ScheduledTestRun {
+  id: string;
+  name: string;
+  cronExpression: string;
+  timezone: string;
+  enabled: boolean;
+  
+  runConfiguration: {
+    planId: number;
+    suiteIds?: number[];
+    testCaseIds?: number[];
+    configurationId?: number;
+    buildDefinitionId?: number;
+    
+    parallel: boolean;
+    maxParallelism: number;
+    timeoutMinutes: number;
+    
+    retryPolicy?: {
+      maxRetries: number;
+      retryOnFailure: boolean;
+      retryDelay: number;
+    };
+    
+    triggerConditions?: {
+      onBuildCompletion: boolean;
+      onlyIfBuildSuccessful: boolean;
+      minimumChanges: number;
+      skipIfNoChanges: boolean;
+    };
+  };
+  
+  schedule: {
+    startDate?: Date;
+    endDate?: Date;
+    nextRun?: Date;
+    lastRun?: Date;
+  };
+  
+  notifications?: {
+    onSuccess?: string[];
+    onFailure?: string[];
+    onTimeout?: string[];
+    includeReport: boolean;
+  };
+  
+  statistics: {
+    totalRuns: number;
+    successfulRuns: number;
+    failedRuns: number;
+    averageDuration: number;
+  };
+  
+  createdBy: IdentityRef;
+  createdDate: Date;
+  lastModifiedBy: IdentityRef;
+  lastModifiedDate: Date;
+}
+
+export interface BatchTestExecution {
+  id: string;
+  name: string;
+  state: "NotStarted" | "InProgress" | "Completed" | "Failed" | "Cancelled";
+  
+  runs: {
+    runName: string;
+    planId: number;
+    suiteIds?: number[];
+    testCaseIds?: number[];
+    configurationId?: number;
+    priority: number;
+    dependsOn?: string[];
+    
+    state: "Pending" | "Running" | "Completed" | "Failed" | "Skipped";
+    runId?: number;
+    startTime?: Date;
+    endTime?: Date;
+    duration?: number;
+  }[];
+  
+  executionMode: "sequential" | "parallel" | "prioritized";
+  maxConcurrentRuns: number;
+  continueOnFailure: boolean;
+  
+  resourceAllocation?: {
+    cpuLimit?: number;
+    memoryLimit?: number;
+    diskSpace?: number;
+    networkBandwidth?: number;
+  };
+  
+  progress: {
+    totalRuns: number;
+    completedRuns: number;
+    failedRuns: number;
+    remainingRuns: number;
+    estimatedTimeRemaining?: number;
+  };
+  
+  globalTimeout: number;
+  
+  createdBy: IdentityRef;
+  createdDate: Date;
+  startedDate?: Date;
+  completedDate?: Date;
+}
+
+export interface ExecutionHistoryEntry {
+  runId: number;
+  runName: string;
+  planId: number;
+  planName: string;
+  
+  execution: {
+    startTime: Date;
+    endTime?: Date;
+    duration?: number;
+    state: "NotStarted" | "InProgress" | "Completed" | "Aborted" | "Timeout";
+    outcome?: "Passed" | "Failed" | "Blocked" | "PartiallySucceeded";
+  };
+  
+  results: {
+    totalTests: number;
+    passedTests: number;
+    failedTests: number;
+    blockedTests: number;
+    notExecutedTests: number;
+    passRate: number;
+  };
+  
+  environment?: {
+    configuration?: string;
+    buildId?: number;
+    buildNumber?: string;
+    releaseId?: number;
+  };
+  
+  performance?: {
+    averageTestDuration: number;
+    longestTestDuration: number;
+    shortestTestDuration: number;
+    throughput: number; // tests per minute
+  };
+  
+  flakiness?: {
+    flakyTests: number;
+    flakinessRate: number;
+    newlyFlakyTests: string[];
+    resolvedFlakyTests: string[];
+  };
+  
+  trends?: {
+    passRateTrend: number; // percentage change
+    durationTrend: number; // percentage change
+    comparedToPrevious: boolean;
+  };
+}
+
+export interface TestDataOperation {
+  id: string;
+  operation: "generate" | "cleanup" | "mask" | "version" | "restore" | "backup";
+  state: "Pending" | "InProgress" | "Completed" | "Failed" | "Cancelled";
+  
+  scope: {
+    planIds?: number[];
+    suiteIds?: number[];
+    testCaseIds?: number[];
+    dataCategories?: string[];
+  };
+  
+  progress: {
+    totalItems: number;
+    processedItems: number;
+    failedItems: number;
+    estimatedTimeRemaining?: number;
+  };
+  
+  results?: {
+    recordsProcessed: number;
+    recordsGenerated?: number;
+    recordsCleaned?: number;
+    recordsMasked?: number;
+    backupLocation?: string;
+    versionTag?: string;
+  };
+  
+  executionMode: "immediate" | "scheduled" | "on-demand";
+  scheduleExpression?: string;
+  
+  createdBy: IdentityRef;
+  createdDate: Date;
+  startedDate?: Date;
+  completedDate?: Date;
+  
+  errors?: string[];
+  warnings?: string[];
 }

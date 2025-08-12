@@ -9,9 +9,10 @@ import { WebApi } from "azure-devops-node-api";
 import { configureTestSuiteTools, TEST_SUITE_TOOLS } from "./testsuites.js";
 import { configureTestCaseTools, TEST_CASE_TOOLS } from "./testcases.js";
 import { configureTestExecutionTools, TEST_EXECUTION_TOOLS } from "./testexecution.js";
+import { configureTestConfigurationTools, TEST_CONFIGURATION_TOOLS } from "./testconfigurations.js";
 
 // Export all tool configurations
-export { TEST_SUITE_TOOLS, TEST_CASE_TOOLS, TEST_EXECUTION_TOOLS };
+export { TEST_SUITE_TOOLS, TEST_CASE_TOOLS, TEST_EXECUTION_TOOLS, TEST_CONFIGURATION_TOOLS };
 
 // Export schemas and utilities
 export * from "./schemas.js";
@@ -19,12 +20,13 @@ export * from "./utils.js";
 
 /**
  * Configure all testing tools for the MCP server
- * 
+ *
  * This function registers all testing-related tools including:
  * - Test Suite Management (5 tools): create, update, delete, list, get details
- * - Test Case Management (3 tools): update, search, bulk operations  
- * - Test Execution (3 tools): run tests, update results, get run results
- * 
+ * - Test Case Management (3 tools): update, search, bulk operations
+ * - Test Execution (7 tools): run tests, update results, get run results, schedule runs, batch execution, execution history, test data management
+ * - Test Configuration Management (6 tools): create, update, list, delete, clone, validate configurations
+ *
  * @param server - The MCP server instance
  * @param tokenProvider - Function to get Azure DevOps access token
  * @param connectionProvider - Function to get Azure DevOps API connection
@@ -42,6 +44,9 @@ export function configureTestingTools(
   
   // Register test execution tools
   configureTestExecutionTools(server, tokenProvider, connectionProvider);
+  
+  // Register test configuration management tools
+  configureTestConfigurationTools(server, tokenProvider, connectionProvider);
 }
 
 /**
@@ -51,7 +56,8 @@ export function getAllTestingToolNames(): string[] {
   return [
     ...Object.values(TEST_SUITE_TOOLS),
     ...Object.values(TEST_CASE_TOOLS),
-    ...Object.values(TEST_EXECUTION_TOOLS)
+    ...Object.values(TEST_EXECUTION_TOOLS),
+    ...Object.values(TEST_CONFIGURATION_TOOLS)
   ];
 }
 
@@ -70,7 +76,11 @@ export function getTestingToolsByCategory() {
     },
     testExecution: {
       tools: TEST_EXECUTION_TOOLS,
-      description: "Tools for test execution (run tests, update results, get results)"
+      description: "Tools for test execution (run tests, update results, get results, schedule runs, batch execution, execution history, test data management)"
+    },
+    testConfigurations: {
+      tools: TEST_CONFIGURATION_TOOLS,
+      description: "Tools for managing test configurations (create, update, list, delete, clone, validate configurations)"
     }
   };
 }

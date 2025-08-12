@@ -49,6 +49,7 @@ module.exports = {
     "^(.+)/testsuites\\.js$": "$1/testsuites.ts",
     "^(.+)/testcases\\.js$": "$1/testcases.ts",
     "^(.+)/testexecution\\.js$": "$1/testexecution.ts",
+    "^(.+)/testconfigurations\\.js$": "$1/testconfigurations.ts",
     "^(.+)/testing/index\\.js$": "$1/testing/index.ts",
   },
 };

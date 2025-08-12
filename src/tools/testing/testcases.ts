@@ -329,133 +329,121 @@ export function configureTestCaseTools(
           const connection = await connectionProvider();
           const witApi = await connection.getWorkItemTrackingApi();
 
-          const results: Array<{
+          const allResults: Array<{
             success: boolean;
             testCaseId: number;
             result?: any;
             message?: string;
             error?: string;
           }> = [];
-          const errors: Array<{
-            success: false;
-            testCaseId: number;
-            error: string;
-          }> = [];
-          let successCount = 0;
 
-          // Process in batches
-          for (let i = 0; i < params.testCaseIds.length; i += params.batchSize) {
-            const batch = params.testCaseIds.slice(i, i + params.batchSize);
-            
-            const batchPromises = batch.map(async (testCaseId) => {
-              try {
-                // Build patch document for this test case
-                const patchDocument = [];
+          // Process test cases individually
+          for (const testCaseId of params.testCaseIds) {
+            try {
+              // Build patch document for this test case
+              const patchDocument = [];
 
-                if (params.updates.priority) {
-                  patchDocument.push({
-                    op: "add",
-                    path: "/fields/Microsoft.VSTS.Common.Priority",
-                    value: params.updates.priority
-                  });
+              if (params.updates.priority) {
+                patchDocument.push({
+                  op: "add",
+                  path: "/fields/Microsoft.VSTS.Common.Priority",
+                  value: params.updates.priority
+                });
+              }
+
+              if (params.updates.state) {
+                patchDocument.push({
+                  op: "add",
+                  path: "/fields/System.State",
+                  value: params.updates.state
+                });
+              }
+
+              if (params.updates.areaPath) {
+                patchDocument.push({
+                  op: "add",
+                  path: "/fields/System.AreaPath",
+                  value: params.updates.areaPath
+                });
+              }
+
+              if (params.updates.iterationPath) {
+                patchDocument.push({
+                  op: "add",
+                  path: "/fields/System.IterationPath",
+                  value: params.updates.iterationPath
+                });
+              }
+
+              if (params.updates.automationStatus) {
+                patchDocument.push({
+                  op: "add",
+                  path: "/fields/Microsoft.VSTS.TCM.AutomationStatus",
+                  value: params.updates.automationStatus
+                });
+              }
+
+              // Handle tag operations
+              if (params.updates.addTags || params.updates.removeTags) {
+                // Get current tags first
+                const currentItem = await witApi.getWorkItem(testCaseId, ["System.Tags"]);
+                const currentTags = currentItem.fields?.["System.Tags"]?.split(';').map((t: string) => t.trim()).filter((t: string) => t) || [];
+                
+                let newTags = [...currentTags];
+
+                if (params.updates.addTags) {
+                  newTags = [...new Set([...newTags, ...params.updates.addTags])];
                 }
 
-                if (params.updates.state) {
-                  patchDocument.push({
-                    op: "add",
-                    path: "/fields/System.State",
-                    value: params.updates.state
-                  });
+                if (params.updates.removeTags) {
+                  newTags = newTags.filter(tag => !params.updates.removeTags!.includes(tag));
                 }
 
-                if (params.updates.areaPath) {
-                  patchDocument.push({
-                    op: "add",
-                    path: "/fields/System.AreaPath",
-                    value: params.updates.areaPath
-                  });
-                }
+                patchDocument.push({
+                  op: "add",
+                  path: "/fields/System.Tags",
+                  value: newTags.join("; ")
+                });
+              }
 
-                if (params.updates.iterationPath) {
-                  patchDocument.push({
-                    op: "add",
-                    path: "/fields/System.IterationPath",
-                    value: params.updates.iterationPath
-                  });
-                }
+              if (patchDocument.length > 0) {
+                const updatedItem = await witApi.updateWorkItem({}, patchDocument, testCaseId);
+                allResults.push({
+                  success: true,
+                  testCaseId,
+                  result: updatedItem
+                });
+              } else {
+                allResults.push({
+                  success: true,
+                  testCaseId,
+                  message: "No updates needed"
+                });
+              }
 
-                if (params.updates.automationStatus) {
-                  patchDocument.push({
-                    op: "add",
-                    path: "/fields/Microsoft.VSTS.TCM.AutomationStatus",
-                    value: params.updates.automationStatus
-                  });
-                }
-
-                // Handle tag operations
-                if (params.updates.addTags || params.updates.removeTags) {
-                  // Get current tags first
-                  const currentItem = await witApi.getWorkItem(testCaseId, ["System.Tags"]);
-                  const currentTags = currentItem.fields?.["System.Tags"]?.split(';').map((t: string) => t.trim()).filter((t: string) => t) || [];
-                  
-                  let newTags = [...currentTags];
-
-                  if (params.updates.addTags) {
-                    newTags = [...new Set([...newTags, ...params.updates.addTags])];
-                  }
-
-                  if (params.updates.removeTags) {
-                    newTags = newTags.filter(tag => !params.updates.removeTags!.includes(tag));
-                  }
-
-                  patchDocument.push({
-                    op: "add",
-                    path: "/fields/System.Tags",
-                    value: newTags.join("; ")
-                  });
-                }
-
-                if (patchDocument.length > 0) {
-                  const updatedItem = await witApi.updateWorkItem({}, patchDocument, testCaseId);
-                  successCount++;
-                  return {
-                    success: true,
-                    testCaseId,
-                    result: updatedItem
-                  };
-                } else {
-                  return {
-                    success: true,
-                    testCaseId,
-                    message: "No updates needed"
-                  };
-                }
-
-              } catch (error) {
-                const errorResult = {
-                  success: false as const,
+            } catch (error) {
+              if (params.continueOnError) {
+                allResults.push({
+                  success: false,
                   testCaseId,
                   error: error instanceof Error ? error.message : "Unknown error"
-                };
-
-                if (params.continueOnError) {
-                  errors.push(errorResult);
-                  return errorResult;
-                } else {
-                  throw error;
-                }
+                });
+              } else {
+                throw error;
               }
-            });
-
-            const batchResults = await Promise.all(batchPromises);
-            results.push(...batchResults);
+            }
           }
 
+          // Count successes and errors from results
+          const successCount = allResults.filter(r => r.success).length;
+          const errorCount = allResults.filter(r => !r.success).length;
+          const errors = allResults.filter(r => !r.success);
+
           return {
-            results,
+            results: allResults,
             totalProcessed: params.testCaseIds.length,
             successCount,
-            errorCount: errors.length,
+            errorCount,
             errors: errors.length > 0 ? errors : undefined
           };
         });
@@ -465,6 +453,10 @@ export function configureTestCaseTools(
         };
 
       } catch (error) {
+        // When continueOnError is false, preserve the original error
+        if (!params.continueOnError && error instanceof Error) {
+          throw error;
+        }
         throw parseAzureDevOpsError(error);
       }
     }

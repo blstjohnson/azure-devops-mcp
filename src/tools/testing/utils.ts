@@ -441,3 +441,298 @@ export function safeStringify(obj: any, space?: number): string {
     return `[Error stringifying object: ${error instanceof Error ? error.message : 'Unknown error'}]`;
   }
 }
+
+/**
+ * Configuration-specific utilities for test configuration management
+ */
+  
+  /**
+   * Validate configuration variable name format
+   */
+  export function validateConfigurationVariableName(name: string): boolean {
+    if (!name || name.trim().length === 0) {
+      return false;
+    }
+    // Must start with letter, contain only letters, numbers, and underscores
+    return /^[a-zA-Z][a-zA-Z0-9_]*$/.test(name);
+  }
+  
+  /**
+   * Encrypt configuration value (simplified implementation)
+   */
+  export function encryptConfigurationValue(value: string): string {
+    // In a real implementation, this would use proper encryption
+    return `encrypted:${Buffer.from(value).toString('base64')}`;
+  }
+  
+  /**
+   * Decrypt configuration value (simplified implementation)
+   */
+  export function decryptConfigurationValue(encryptedValue: string): string {
+    if (encryptedValue.startsWith('encrypted:')) {
+      return Buffer.from(encryptedValue.substring(10), 'base64').toString();
+    }
+    return encryptedValue;
+  }
+  
+  /**
+   * Validate environment type
+   */
+  export function validateEnvironmentType(environment: string): boolean {
+    const validEnvironments = ["Development", "Test", "Staging", "Production", "Integration", "QA"];
+    return validEnvironments.includes(environment);
+  }
+  
+  /**
+   * Create configuration backup object
+   */
+  export function createConfigurationBackup(configuration: any): any {
+    return {
+      configuration: { ...configuration },
+      backupDate: new Date().toISOString(),
+      backupVersion: "1.0",
+      backupSource: "Azure DevOps MCP Server"
+    };
+  }
+  
+  /**
+   * Validate cron expression format
+   */
+  export function validateCronExpression(cronExpression: string): boolean {
+    if (!cronExpression || cronExpression.trim().length === 0) {
+      return false;
+    }
+    
+    // Basic cron validation - 5 or 6 fields
+    const parts = cronExpression.trim().split(/\s+/);
+    return parts.length === 5 || parts.length === 6;
+  }
+  
+  /**
+   * Calculate execution time estimate based on historical data
+   */
+  export function estimateExecutionTime(
+    testCount: number,
+    averageTestDuration: number = 30000, // 30 seconds default
+    parallelism: number = 1
+  ): number {
+    const totalTime = (testCount * averageTestDuration) / parallelism;
+    // Add 20% buffer for overhead
+    return Math.ceil(totalTime * 1.2);
+  }
+  
+  /**
+   * Parse test execution schedule from cron expression
+   */
+  export function parseScheduleDescription(cronExpression: string): string {
+    // Simplified schedule description parser
+    const parts = cronExpression.trim().split(/\s+/);
+    
+    if (parts.length < 5) {
+      return "Invalid schedule format";
+    }
+    
+    const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
+    
+    // Handle common patterns
+    if (cronExpression === "0 2 * * 1-5") {
+      return "Daily at 2:00 AM, Monday through Friday";
+    }
+    
+    if (cronExpression === "0 0 * * 0") {
+      return "Weekly on Sunday at midnight";
+    }
+    
+    if (cronExpression === "0 0 1 * *") {
+      return "Monthly on the 1st at midnight";
+    }
+    
+    return `Custom schedule: ${cronExpression}`;
+  }
+  
+  /**
+   * Validate test data operation parameters
+   */
+  export function validateTestDataOperation(operation: string, params: any): { valid: boolean; errors: string[] } {
+    const errors: string[] = [];
+    
+    switch (operation) {
+      case "generate":
+        if (!params.recordCount || params.recordCount < 1) {
+          errors.push("Record count must be at least 1 for generation");
+        }
+        if (params.recordCount > 100000) {
+          errors.push("Record count cannot exceed 100,000 for generation");
+        }
+        break;
+        
+      case "cleanup":
+        if (params.retentionDays < 0) {
+          errors.push("Retention days cannot be negative");
+        }
+        break;
+        
+      case "mask":
+        if (!params.maskingRules || params.maskingRules.length === 0) {
+          errors.push("Masking rules are required for masking operation");
+        }
+        break;
+        
+      case "version":
+      case "backup":
+        if (!params.versionName || params.versionName.trim().length === 0) {
+          errors.push("Version name is required for versioning/backup operations");
+        }
+        break;
+    }
+    
+    return {
+      valid: errors.length === 0,
+      errors
+    };
+  }
+  
+  /**
+   * Calculate test execution statistics
+   */
+  export function calculateExecutionStatistics(results: any[]): {
+    totalTests: number;
+    passedTests: number;
+    failedTests: number;
+    passRate: number;
+    averageDuration: number;
+  } {
+    if (!results || results.length === 0) {
+      return {
+        totalTests: 0,
+        passedTests: 0,
+        failedTests: 0,
+        passRate: 0,
+        averageDuration: 0
+      };
+    }
+    
+    const totalTests = results.length;
+    const passedTests = results.filter(r => r.outcome === "Passed").length;
+    const failedTests = results.filter(r => r.outcome === "Failed").length;
+    const passRate = totalTests > 0 ? (passedTests / totalTests) * 100 : 0;
+    
+    const validDurations = results
+      .map(r => r.durationInMs)
+      .filter(d => d != null && d > 0);
+    
+    const averageDuration = validDurations.length > 0 ?
+      validDurations.reduce((a, b) => a + b, 0) / validDurations.length : 0;
+    
+    return {
+      totalTests,
+      passedTests,
+      failedTests,
+      passRate,
+      averageDuration
+    };
+  }
+  
+  /**
+   * Format execution duration for display
+   */
+  export function formatExecutionDuration(durationMs: number): string {
+    if (durationMs < 1000) {
+      return `${durationMs}ms`;
+    }
+    
+    const seconds = Math.floor(durationMs / 1000);
+    if (seconds < 60) {
+      return `${seconds}s`;
+    }
+    
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    
+    if (minutes < 60) {
+      return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
+    }
+    
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    
+    return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+  }
+  
+  /**
+   * Generate unique test run identifier
+   */
+  export function generateTestRunId(prefix: string = "run"): string {
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(2, 8);
+    return `${prefix}_${timestamp}_${random}`;
+  }
+  
+  /**
+   * Validate batch execution dependencies
+   */
+  export function validateBatchDependencies(runs: any[]): { valid: boolean; errors: string[]; dependencyOrder: string[] } {
+    const errors: string[] = [];
+    const runNames = new Set(runs.map(r => r.runName));
+    const dependencyGraph = new Map<string, string[]>();
+    
+    // Build dependency graph
+    for (const run of runs) {
+      dependencyGraph.set(run.runName, run.dependsOn || []);
+      
+      // Validate dependencies exist
+      if (run.dependsOn) {
+        for (const dependency of run.dependsOn) {
+          if (!runNames.has(dependency)) {
+            errors.push(`Run '${run.runName}' depends on '${dependency}' which is not in the batch`);
+          }
+        }
+      }
+    }
+    
+    // Check for circular dependencies using topological sort
+    const dependencyOrder: string[] = [];
+    const visited = new Set<string>();
+    const visiting = new Set<string>();
+    
+    function visit(runName: string): boolean {
+      if (visiting.has(runName)) {
+        errors.push(`Circular dependency detected involving '${runName}'`);
+        return false;
+      }
+      
+      if (visited.has(runName)) {
+        return true;
+      }
+      
+      visiting.add(runName);
+      
+      const dependencies = dependencyGraph.get(runName) || [];
+      for (const dependency of dependencies) {
+        if (!visit(dependency)) {
+          return false;
+        }
+      }
+      
+      visiting.delete(runName);
+      visited.add(runName);
+      dependencyOrder.unshift(runName); // Add to front for correct order
+      
+      return true;
+    }
+    
+    // Visit all runs
+    for (const runName of runNames) {
+      if (!visited.has(runName)) {
+        if (!visit(runName)) {
+          break;
+        }
+      }
+    }
+    
+    return {
+      valid: errors.length === 0,
+      errors,
+      dependencyOrder
+    };
+  }

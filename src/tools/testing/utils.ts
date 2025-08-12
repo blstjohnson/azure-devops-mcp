@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) eKassir ltd.
 // Licensed under the MIT License.
 
 import { TestingError, ErrorCodes, ToolResponse, PaginationInfo, ResponseMetadata } from "./schemas.js";

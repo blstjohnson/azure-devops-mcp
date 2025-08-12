@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) eKassir ltd.
 // Licensed under the MIT License.
 
 import { AccessToken } from "@azure/identity";

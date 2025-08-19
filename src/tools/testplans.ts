@@ -6,6 +6,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebApi } from "azure-devops-node-api";
 import { TestPlanCreateParams } from "azure-devops-node-api/interfaces/TestPlanInterfaces.js";
 import { z } from "zod";
+import { convertStepsToXml } from "./testing/utils.js";
 
 const Test_Plan_Tools = {
   create_test_plan: "testplan_create_test_plan",
@@ -221,58 +222,6 @@ function configureTestPlanTools(server: McpServer, tokenProvider: () => Promise<
       };
     }
   );
-}
-
-/*
- * Helper function to convert steps text to XML format required
- */
-function convertStepsToXml(steps: string): string {
-  // Accepts steps in the format: '1. Step one|Expected result one\n2. Step two|Expected result two'
-  const stepsLines = steps.split("\n").filter((line) => line.trim() !== "");
-
-  let xmlSteps = `<steps id="0" last="${stepsLines.length}">`;
-
-  for (let i = 0; i < stepsLines.length; i++) {
-    const stepLine = stepsLines[i].trim();
-    if (stepLine) {
-      // Split step and expected result by '|', fallback to default if not provided
-      const [stepPart, expectedPart] = stepLine.split("|").map((s) => s.trim());
-      const stepMatch = stepPart.match(/^(\d+)\.\s*(.+)$/);
-      const stepText = stepMatch ? stepMatch[2] : stepPart;
-      const expectedText = expectedPart || "Verify step completes successfully";
-
-      xmlSteps += `
-                <step id="${i + 1}" type="ActionStep">
-                    <parameterizedString isformatted="true">${escapeXml(stepText)}</parameterizedString>
-                    <parameterizedString isformatted="true">${escapeXml(expectedText)}</parameterizedString>
-                </step>`;
-    }
-  }
-
-  xmlSteps += "</steps>";
-  return xmlSteps;
-}
-
-/*
- * Helper function to escape XML special characters
- */
-function escapeXml(unsafe: string): string {
-  return unsafe.replace(/[<>&'"]/g, (c) => {
-    switch (c) {
-      case "<":
-        return "&lt;";
-      case ">":
-        return "&gt;";
-      case "&":
-        return "&amp;";
-      case "'":
-        return "&apos;";
-      case '"':
-        return "&quot;";
-      default:
-        return c;
-    }
-  });
 }
 
 export { Test_Plan_Tools, configureTestPlanTools };

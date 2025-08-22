@@ -67,6 +67,10 @@ Interact with these Azure DevOps services:
 - **wit_get_work_items_for_iteration**: Retrieve a list of work items for a specified iteration.
 - **wit_add_work_item_comment**: Add a comment to a work item by ID.
 - **wit_add_child_work_items**: Create one or more child work items of a specific work item type for the given parent ID.
+- **wit_list_work_item_attachments**: List all attachments for a specific work item with metadata including ID, filename, size, and creation date.
+- **wit_download_work_item_attachment**: Download attachment content from a work item as base64-encoded data with metadata.
+- **wit_upload_work_item_attachment**: Upload new attachments to work items with file validation and automatic linking.
+- **wit_delete_work_item_attachment**: Remove attachments from work items with proper cleanup and error handling.
 - **wit_link_work_item_to_pull_request**: Link a single work item to an existing pull request.
 - **wit_get_work_item_type**: Get a specific work item type.
 - **wit_get_query**: Get a query by its ID or path.

@@ -7,6 +7,7 @@ import { WebApi } from "azure-devops-node-api";
 import { WorkItemExpand, WorkItemRelation } from "azure-devops-node-api/interfaces/WorkItemTrackingInterfaces.js";
 import { QueryExpand } from "azure-devops-node-api/interfaces/WorkItemTrackingInterfaces.js";
 import { z } from "zod";
+import { Readable } from "stream";
 import { batchApiVersion, markdownCommentsApiVersion, getEnumKeys, safeEnumConvert, getAuthorizationHeader } from "../utils.js";
 
 const WORKITEM_TOOLS = {
@@ -28,7 +29,62 @@ const WORKITEM_TOOLS = {
   update_work_items_batch: "wit_update_work_items_batch",
   work_items_link: "wit_work_items_link",
   work_item_unlink: "wit_work_item_unlink",
+  list_work_item_attachments: "wit_list_work_item_attachments",
+  download_work_item_attachment: "wit_download_work_item_attachment",
+  upload_work_item_attachment: "wit_upload_work_item_attachment",
+  delete_work_item_attachment: "wit_delete_work_item_attachment",
 };
+
+// File validation patterns for attachments
+const fileNameValidation = z.string()
+  .min(1, "File name cannot be empty")
+  .max(260, "File name too long")
+  .regex(/^[^<>:"/\\|?*\x00-\x1f]+$/, "File name contains invalid characters")
+  .refine(name => !name.match(/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i),
+    "File name is reserved");
+
+const base64ContentValidation = z.string()
+  .regex(/^[A-Za-z0-9+/]*={0,2}$/, "Invalid base64 content")
+  .refine(content => {
+    try {
+      const decoded = Buffer.from(content, 'base64');
+      return decoded.length > 0 && decoded.length <= 50 * 1024 * 1024; // 50MB limit
+    } catch {
+      return false;
+    }
+  }, "Content must be valid base64 and under 50MB");
+
+// Schema definitions for attachment tools
+const listWorkItemAttachmentsSchema = z.object({
+  workItemId: z.number().int().positive("Work item ID must be a positive integer"),
+  project: z.string().min(1, "Project cannot be empty"),
+  includeContent: z.boolean().default(false)
+});
+
+const downloadWorkItemAttachmentSchema = z.object({
+  workItemId: z.number().int().positive("Work item ID must be a positive integer"),
+  attachmentId: z.string().min(1, "Attachment ID cannot be empty"),
+  project: z.string().min(1, "Project cannot be empty"),
+  fileName: fileNameValidation,
+  includeMetadata: z.boolean().default(true)
+});
+
+const uploadWorkItemAttachmentSchema = z.object({
+  workItemId: z.number().int().positive("Work item ID must be a positive integer"),
+  project: z.string().min(1, "Project cannot be empty"),
+  fileName: fileNameValidation,
+  content: base64ContentValidation,
+  comment: z.string().max(1000, "Comment too long").optional(),
+  overwrite: z.boolean().default(false)
+});
+
+const deleteWorkItemAttachmentSchema = z.object({
+  workItemId: z.number().int().positive("Work item ID must be a positive integer"),
+  attachmentId: z.string().min(1, "Attachment ID cannot be empty"),
+  project: z.string().min(1, "Project cannot be empty"),
+  fileName: fileNameValidation,
+  force: z.boolean().default(false)
+});
 
 function getLinkTypeFromName(name: string) {
   switch (name.toLowerCase()) {
@@ -858,6 +914,355 @@ function configureWorkItemTools(server: McpServer, tokenProvider: () => Promise<
       }
     }
   );
+
+  // Work Item Attachment Tools
+
+  server.tool(
+    WORKITEM_TOOLS.list_work_item_attachments,
+    "List all attachments for a work item.",
+    listWorkItemAttachmentsSchema.shape,
+    async ({ workItemId, project, includeContent }) => {
+      try {
+        const connection = await connectionProvider();
+        const workItemApi = await connection.getWorkItemTrackingApi();
+
+        // Get work item with relations to find attachments
+        const workItem = await workItemApi.getWorkItem(workItemId, undefined, undefined, WorkItemExpand.Relations, project);
+        
+        if (!workItem) {
+          return {
+            content: [{ type: "text", text: `Work item ${workItemId} not found` }],
+            isError: true,
+          };
+        }
+
+        // Filter attachment relations
+        const attachmentRelations = workItem.relations?.filter(relation =>
+          relation.rel === "AttachedFile"
+        ) || [];
+
+        const attachments = attachmentRelations.map(relation => {
+          const attachment: any = {
+            id: relation.url?.split('/').pop(),
+            fileName: relation.attributes?.name || "Unknown",
+            comment: relation.attributes?.comment,
+            url: relation.url
+          };
+
+          if (includeContent) {
+            attachment.downloadUrl = relation.url;
+          }
+
+          return attachment;
+        });
+
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              workItemId,
+              attachments,
+              totalCount: attachments.length
+            }, null, 2)
+          }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error listing work item attachments: ${errorMessage}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.tool(
+    WORKITEM_TOOLS.download_work_item_attachment,
+    "Download attachment content as base64-encoded data.",
+    downloadWorkItemAttachmentSchema.shape,
+    async ({ workItemId, attachmentId, project, fileName, includeMetadata }) => {
+      try {
+        const connection = await connectionProvider();
+        const orgUrl = connection.serverUrl;
+        const accessToken = await tokenProvider();
+
+        // Get work item to find attachment metadata
+        const workItemApi = await connection.getWorkItemTrackingApi();
+        const workItem = await workItemApi.getWorkItem(workItemId, undefined, undefined, WorkItemExpand.Relations, project);
+        
+        const attachmentRelation = workItem.relations?.find(relation =>
+          relation.rel === "AttachedFile" && relation.url?.includes(attachmentId)
+        );
+
+        if (!attachmentRelation) {
+          return {
+            content: [{ type: "text", text: `Attachment with ID '${attachmentId}' not found on work item ${workItemId}` }],
+            isError: true,
+          };
+        }
+
+        // Download attachment content using REST API
+        const response = await fetch(`${orgUrl}/${project}/_apis/wit/attachments/${attachmentId}?api-version=6.0`, {
+          headers: {
+            "Authorization": getAuthorizationHeader(orgUrl, accessToken.token),
+            "User-Agent": userAgentProvider(),
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to download attachment: ${response.statusText}`);
+        }
+
+        const buffer = await response.arrayBuffer();
+        const content = Buffer.from(buffer).toString('base64');
+
+        const result: any = {
+          attachmentId,
+          fileName,
+          contentType: getContentType(fileName),
+          size: buffer.byteLength,
+          content
+        };
+
+        if (includeMetadata) {
+          result.metadata = {
+            comment: attachmentRelation.attributes?.comment,
+            url: attachmentRelation.url
+          };
+        }
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error downloading work item attachment: ${errorMessage}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.tool(
+    WORKITEM_TOOLS.upload_work_item_attachment,
+    "Upload a new attachment to a work item.",
+    uploadWorkItemAttachmentSchema.shape,
+    async ({ workItemId, project, fileName, content, comment, overwrite }) => {
+      try {
+        const connection = await connectionProvider();
+        const workItemApi = await connection.getWorkItemTrackingApi();
+
+        // Validate file content
+        const buffer = Buffer.from(content, 'base64');
+        if (buffer.length === 0) {
+          return {
+            content: [{ type: "text", text: "File content is empty" }],
+            isError: true,
+          };
+        }
+
+        // Check if we should overwrite existing attachment
+        if (!overwrite) {
+          const workItem = await workItemApi.getWorkItem(workItemId, undefined, undefined, WorkItemExpand.Relations, project);
+          const existingAttachment = workItem.relations?.find(relation =>
+            relation.rel === "AttachedFile" && relation.attributes?.name === fileName
+          );
+          
+          if (existingAttachment) {
+            return {
+              content: [{ type: "text", text: `File '${fileName}' already exists. Use overwrite=true to replace it.` }],
+              isError: true,
+            };
+          }
+        }
+
+        // Upload attachment using REST API
+        const orgUrl = connection.serverUrl;
+        const accessToken = await tokenProvider();
+
+        // Create form data for attachment upload
+        const formData = new FormData();
+        const blob = new Blob([buffer], { type: getContentType(fileName) });
+        formData.append('file', blob, fileName);
+
+        const uploadResponse = await fetch(`${orgUrl}/${project}/_apis/wit/attachments?fileName=${encodeURIComponent(fileName)}&api-version=6.0`, {
+          method: "POST",
+          headers: {
+            "Authorization": getAuthorizationHeader(orgUrl, accessToken.token),
+            "User-Agent": userAgentProvider(),
+          },
+          body: formData,
+        });
+
+        if (!uploadResponse.ok) {
+          throw new Error(`Failed to upload attachment: ${uploadResponse.statusText}`);
+        }
+
+        const attachmentRef = await uploadResponse.json();
+
+        if (!attachmentRef || !attachmentRef.id || !attachmentRef.url) {
+          return {
+            content: [{ type: "text", text: "Failed to create attachment" }],
+            isError: true,
+          };
+        }
+
+        // Link attachment to work item
+        const patchDocument = [{
+          op: "add",
+          path: "/relations/-",
+          value: {
+            rel: "AttachedFile",
+            url: attachmentRef.url,
+            attributes: {
+              name: fileName,
+              comment: comment || ""
+            }
+          }
+        }];
+
+        await workItemApi.updateWorkItem(null, patchDocument, workItemId, project);
+
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              attachmentId: attachmentRef.id,
+              fileName,
+              size: buffer.length,
+              url: attachmentRef.url,
+              workItemId,
+              uploadedDate: new Date().toISOString()
+            }, null, 2)
+          }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error uploading work item attachment: ${errorMessage}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.tool(
+    WORKITEM_TOOLS.delete_work_item_attachment,
+    "Remove an attachment from a work item.",
+    deleteWorkItemAttachmentSchema.shape,
+    async ({ workItemId, attachmentId, project, fileName, force }) => {
+      try {
+        const connection = await connectionProvider();
+        const workItemApi = await connection.getWorkItemTrackingApi();
+
+        // Get work item with relations to find the attachment
+        const workItem = await workItemApi.getWorkItem(workItemId, undefined, undefined, WorkItemExpand.Relations, project);
+        
+        if (!workItem) {
+          return {
+            content: [{ type: "text", text: `Work item ${workItemId} not found` }],
+            isError: true,
+          };
+        }
+
+        // Find the attachment relation
+        const attachmentRelations = workItem.relations?.filter(relation =>
+          relation.rel === "AttachedFile"
+        ) || [];
+
+        const attachmentIndex = attachmentRelations.findIndex(relation =>
+          relation.url?.includes(attachmentId) && relation.attributes?.name === fileName
+        );
+
+        if (attachmentIndex === -1) {
+          return {
+            content: [{ type: "text", text: `Attachment '${fileName}' with ID '${attachmentId}' not found on work item ${workItemId}` }],
+            isError: true,
+          };
+        }
+
+        // Find the actual index in all relations
+        const relationIndex = workItem.relations?.findIndex(relation =>
+          relation.rel === "AttachedFile" &&
+          relation.url?.includes(attachmentId) &&
+          relation.attributes?.name === fileName
+        );
+
+        if (relationIndex === undefined || relationIndex === -1) {
+          return {
+            content: [{ type: "text", text: `Could not locate attachment relation for deletion` }],
+            isError: true,
+          };
+        }
+
+        // Remove the attachment relation from work item
+        const patchDocument = [{
+          op: "remove",
+          path: `/relations/${relationIndex}`
+        }];
+
+        await workItemApi.updateWorkItem(null, patchDocument, workItemId, project);
+
+        // Note: Azure DevOps API doesn't provide direct attachment deletion
+        // The attachment file remains in storage but is no longer linked to the work item
+        // This is the expected behavior as per Azure DevOps design
+
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              attachmentId,
+              fileName,
+              workItemId,
+              deletedDate: new Date().toISOString(),
+              success: true,
+              attachmentFileDeleted: false
+            }, null, 2)
+          }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error deleting work item attachment: ${errorMessage}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+}
+
+// Helper function for content type detection
+function getContentType(fileName: string): string {
+  const ext = fileName.toLowerCase().split('.').pop() || '';
+  const mimeTypes: Record<string, string> = {
+    'txt': 'text/plain',
+    'md': 'text/markdown',
+    'pdf': 'application/pdf',
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'png': 'image/png',
+    'gif': 'image/gif',
+    'bmp': 'image/bmp',
+    'svg': 'image/svg+xml',
+    'doc': 'application/msword',
+    'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'xls': 'application/vnd.ms-excel',
+    'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'ppt': 'application/vnd.ms-powerpoint',
+    'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'zip': 'application/zip',
+    '7z': 'application/x-7z-compressed',
+    'tar': 'application/x-tar',
+    'gz': 'application/gzip',
+    'json': 'application/json',
+    'xml': 'application/xml',
+    'csv': 'text/csv',
+    'log': 'text/plain'
+  };
+  
+  return mimeTypes[ext] || 'application/octet-stream';
 }
 
 export { WORKITEM_TOOLS, configureWorkItemTools };

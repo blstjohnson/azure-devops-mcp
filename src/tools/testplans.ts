@@ -116,18 +116,26 @@ function configureTestPlanTools(server: McpServer, tokenProvider: () => Promise<
     {
       project: z.string().describe("The unique identifier (ID or name) of the Azure DevOps project."),
       title: z.string().describe("The title of the test case."),
+      description: z.string().optional().describe("The description of the test case."),
       steps: z.string().optional().describe("The steps to reproduce the test case. Make sure to format each step as '1. Step one|Expected result one\n2. Step two|Expected result two"),
       priority: z.number().optional().describe("The priority of the test case."),
       areaPath: z.string().optional().describe("The area path for the test case."),
       iterationPath: z.string().optional().describe("The iteration path for the test case."),
+      planId: z.number().optional().describe("The ID of the test plan to link the test case to."),
+      suiteId: z.number().optional().describe("The ID of the test suite to add the test case to."),
     },
-    async ({ project, title, steps, priority, areaPath, iterationPath }) => {
+    async ({ project, title, description, steps, priority, areaPath, iterationPath, planId, suiteId }) => {
       const connection = await connectionProvider();
       const witClient = await connection.getWorkItemTrackingApi();
 
       let stepsXml;
       if (steps) {
-        stepsXml = convertStepsToXml(steps);
+        // Check if steps is already XML formatted
+        if (steps.trim().startsWith('<steps')) {
+          stepsXml = steps; // Use as-is if already XML
+        } else {
+          stepsXml = convertStepsToXml(steps); // Convert from text format
+        }
       }
 
       // Create JSON patch document for work item
@@ -138,6 +146,14 @@ function configureTestPlanTools(server: McpServer, tokenProvider: () => Promise<
         path: "/fields/System.Title",
         value: title,
       });
+
+      if (description) {
+        patchDocument.push({
+          op: "add",
+          path: "/fields/System.Description",
+          value: description,
+        });
+      }
 
       if (stepsXml) {
         patchDocument.push({
@@ -172,6 +188,25 @@ function configureTestPlanTools(server: McpServer, tokenProvider: () => Promise<
       }
 
       const workItem = await witClient.createWorkItem({}, patchDocument, project, "Test Case");
+
+      // Link to test suite if planId and suiteId are provided
+      if (planId && suiteId && workItem.id) {
+        try {
+          const testApi = await connection.getTestApi();
+          await testApi.addTestCasesToSuite(project, planId, suiteId, workItem.id.toString());
+        } catch (linkError) {
+          // If linking fails, still return the created test case but include a warning
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                ...workItem,
+                _linkingWarning: `Test case created successfully but failed to link to suite ${suiteId}: ${linkError instanceof Error ? linkError.message : 'Unknown error'}`
+              }, null, 2)
+            }],
+          };
+        }
+      }
 
       return {
         content: [{ type: "text", text: JSON.stringify(workItem, null, 2) }],

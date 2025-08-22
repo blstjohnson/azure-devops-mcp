@@ -80,7 +80,13 @@ export function configureTestCaseTools(
           }
 
           if (params.steps) {
-            const stepsXml = convertStepsToXml(params.steps);
+            let stepsXml;
+            // Check if steps is already XML formatted
+            if (params.steps.trim().startsWith('<steps')) {
+              stepsXml = params.steps; // Use as-is if already XML
+            } else {
+              stepsXml = convertStepsToXml(params.steps); // Convert from text format
+            }
             patchDocument.push({
               op: "add",
               path: "/fields/Microsoft.VSTS.TCM.Steps",

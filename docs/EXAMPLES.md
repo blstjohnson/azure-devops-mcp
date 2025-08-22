@@ -10,7 +10,8 @@ This guide offers step-by-step examples for using the Azure DevOps MCP Server to
 [Create and Link Test Cases](#create-and-link-test-cases)<br/>
 [Triage Work](#triage-work)<br/>
 [Using Markdown Format](#adding-and-updating-work-items-using-the-format-paramater)<br/>
-[Remove Links from a Work Item](#remove-one-or-more-links-from-a-work-item)
+[Remove Links from a Work Item](#remove-one-or-more-links-from-a-work-item)<br/>
+[Work Item Attachments](#work-item-attachments)
 
 ## 🙋‍♂️ Projects and Teams
 
@@ -149,3 +150,33 @@ Next, remove a specific link to a work item, pull request, etc. or remove links 
 ```plaintext
 Remove link 5678 and 91011 from work item 1234. Also remove any related links and links to pull request 121314
 ```
+
+### Work Item Attachments
+
+You can manage attachments for work items including uploading, downloading, listing, and deleting files.
+
+First, list all attachments for a work item to see what's currently attached:
+
+```plaintext
+List all attachments for work item 12345 in project Contoso
+```
+
+To upload a new attachment to a work item, you'll need the file content in base64 format:
+
+```plaintext
+Upload a document called "requirements.pdf" to work item 12345 in project Contoso with comment "Project requirements document"
+```
+
+Download an existing attachment to view its content:
+
+```plaintext
+Download attachment "screenshot.png" from work item 12345 in project Contoso
+```
+
+Remove an attachment that's no longer needed:
+
+```plaintext
+Delete attachment "old-design.docx" from work item 12345 in project Contoso
+```
+
+> 💡 **Tip**: The attachment tools support various file types including documents (PDF, Word, Excel), images (PNG, JPG, GIF), archives (ZIP, 7z), and text files. Files are automatically validated for type and size limits.

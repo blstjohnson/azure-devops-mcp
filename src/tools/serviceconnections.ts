@@ -63,8 +63,9 @@ function configureServiceConnectionsTools(
         if (params.authSchemes) queryParams.append("authSchemes", params.authSchemes.join(","));
         if (params.endpointNames) queryParams.append("endpointNames", params.endpointNames.join(","));
         if (params.includeFailed) queryParams.append("includeFailed", "true");
+        queryParams.append("api-version", serviceConnectionsApiVersion);
         
-        const endpoint = `${baseUrl}/${params.project}/_apis/serviceendpoint/endpoints?${queryParams.toString()}&api-version=${serviceConnectionsApiVersion}`;
+        const endpoint = `${baseUrl}/${params.project}/_apis/serviceendpoint/endpoints?${queryParams.toString()}`;
         
         const response = await fetch(endpoint, {
           method: "GET",

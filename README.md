@@ -106,6 +106,34 @@ Interact with these Azure DevOps services:
 - **repo_search_commits**: Searches for commits.
 - **repo_create_pull_request_thread**: Creates a new comment thread on a pull request.
 
+### 📦 Variable Groups
+
+- **variablegroups_list**: List variable groups with pagination and optional name filtering.
+- **variablegroups_get**: Get a specific variable group by ID with automatic secret value redaction.
+- **variablegroups_create_or_update**: Create a new variable group or update an existing one with full variable management.
+- **variablegroups_delete**: Delete a variable group by ID.
+- **variablegroups_update_variables**: Update specific variables within a variable group with merge or replace semantics.
+
+### 🌍 Environments
+
+- **environments_list**: List deployment environments with pagination and optional name filtering.
+- **environments_get**: Get detailed information about a specific environment by ID.
+- **environments_create_or_update**: Create a new deployment environment or update an existing one.
+- **environments_delete**: Delete a deployment environment by ID.
+- **environments_add_resource**: Add a resource (VM, Kubernetes) to a deployment environment.
+- **environments_remove_resource**: Remove a resource from a deployment environment.
+- **environments_list_deployments**: List deployment history for a specific environment.
+
+### 🔄 Pipelines
+
+- **pipelines_create_or_update**: Create a new YAML pipeline or update an existing pipeline definition.
+- **pipelines_run**: Trigger a pipeline run with optional branch, commit, and parameter specifications.
+- **pipelines_run_status**: Get the current status of a pipeline run with optional polling until completion.
+- **pipelines_cancel_run**: Cancel a running or queued pipeline execution.
+- **pipelines_get_logs**: Retrieve logs for a completed or running pipeline execution.
+- **pipelines_list_artifacts**: List all artifacts produced by a pipeline run.
+- **pipelines_get_artifact**: Get download URL for a specific pipeline artifact.
+
 ### 🛰️ Builds
 
 - **build_get_definitions**: Retrieve a list of build definitions for a given project.
@@ -118,10 +146,32 @@ Interact with these Azure DevOps services:
 - **build_get_status**: Fetch the status of a specific build.
 - **build_update_build_stage**: Update the stage of a specific build.
 
+### 🔌 Service Connections
+
+- **serviceconnections_list**: List service connections (service endpoints) with optional filtering and pagination.
+- **serviceconnections_get**: Get detailed information about a specific service connection with automatic credential redaction.
+- **serviceconnections_get_or_create**: Idempotently get or create a service connection by name with dry-run support.
+- **serviceconnections_create_or_update**: Create a new service connection or update an existing one with full credential management.
+- **serviceconnections_delete**: Delete a service connection by ID.
+- **serviceconnections_authorize_for_pipeline**: Authorize a service connection for use in YAML pipelines.
+- **serviceconnections_share_with_project**: Share a service connection across multiple projects.
+
 ### 🚀 Releases
 
-- **release_get_definitions**: Retrieve a list of release definitions for a given project.
-- **release_get_releases**: Retrieve a list of releases for a given project.
+- **release_get_definitions**: List release definitions with filtering and pagination support.
+- **release_get_releases**: List releases with comprehensive filtering options.
+- **release_get_definition**: Get detailed information about a specific release definition.
+- **release_create_definition**: Create a new release definition with environments and artifacts.
+- **release_update_definition**: Update an existing release definition configuration.
+- **release_delete_definition**: Delete a release definition by ID.
+- **release_get_release**: Get detailed information about a specific release.
+- **release_create_release**: Create a new release from a definition with artifact bindings.
+- **release_update_release**: Update release metadata and configuration.
+- **release_abandon_release**: Abandon an active release.
+- **release_deploy_environment**: Deploy a release to a specific environment (stage).
+- **release_get_environment**: Get detailed environment deployment status.
+- **release_list_approvals**: List pending approvals with filtering options.
+- **release_update_approval**: Approve or reject a deployment approval.
 
 ### 🔒 Advanced Security
 
